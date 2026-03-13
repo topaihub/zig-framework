@@ -1,0 +1,243 @@
+const std = @import("std");
+const level_model = @import("level.zig");
+const record_model = @import("record.zig");
+const sink_model = @import("sink.zig");
+
+pub const LogLevel = level_model.LogLevel;
+pub const LogField = record_model.LogField;
+pub const LogFieldValue = record_model.LogFieldValue;
+pub const LogRecord = record_model.LogRecord;
+pub const LogSink = sink_model.LogSink;
+
+pub const StoredLogRecord = struct {
+    ts_unix_ms: i64,
+    level: LogLevel,
+    subsystem: []const u8,
+    message: []const u8,
+    trace_id: ?[]const u8 = null,
+    span_id: ?[]const u8 = null,
+    request_id: ?[]const u8 = null,
+    error_code: ?[]const u8 = null,
+    duration_ms: ?u64 = null,
+    fields: []LogField = &.{},
+
+    pub fn clone(allocator: std.mem.Allocator, record: *const LogRecord) !StoredLogRecord {
+        const fields = try allocator.alloc(LogField, record.fields.len);
+        errdefer allocator.free(fields);
+
+        for (record.fields, 0..) |field, index| {
+            fields[index] = .{
+                .key = try allocator.dupe(u8, field.key),
+                .value = try cloneFieldValue(allocator, field.value),
+            };
+        }
+
+        return .{
+            .ts_unix_ms = record.ts_unix_ms,
+            .level = record.level,
+            .subsystem = try allocator.dupe(u8, record.subsystem),
+            .message = try allocator.dupe(u8, record.message),
+            .trace_id = try cloneOptionalString(allocator, record.trace_id),
+            .span_id = try cloneOptionalString(allocator, record.span_id),
+            .request_id = try cloneOptionalString(allocator, record.request_id),
+            .error_code = try cloneOptionalString(allocator, record.error_code),
+            .duration_ms = record.duration_ms,
+            .fields = fields,
+        };
+    }
+
+    pub fn deinit(self: *StoredLogRecord, allocator: std.mem.Allocator) void {
+        allocator.free(self.subsystem);
+        allocator.free(self.message);
+        if (self.trace_id) |trace_id| allocator.free(trace_id);
+        if (self.span_id) |span_id| allocator.free(span_id);
+        if (self.request_id) |request_id| allocator.free(request_id);
+        if (self.error_code) |error_code| allocator.free(error_code);
+
+        for (self.fields) |field| {
+            allocator.free(field.key);
+            switch (field.value) {
+                .string => |value| allocator.free(value),
+                else => {},
+            }
+        }
+        allocator.free(self.fields);
+    }
+};
+
+pub const MemorySink = struct {
+    allocator: std.mem.Allocator,
+    capacity: usize,
+    records: std.ArrayListUnmanaged(StoredLogRecord) = .empty,
+    dropped_records: usize = 0,
+    flush_count: usize = 0,
+
+    const Self = @This();
+
+    const vtable = LogSink.VTable{
+        .write = writeErased,
+        .flush = flushErased,
+        .deinit = deinitErased,
+        .name = nameErased,
+    };
+
+    pub fn init(allocator: std.mem.Allocator, capacity: usize) Self {
+        return .{
+            .allocator = allocator,
+            .capacity = capacity,
+        };
+    }
+
+    pub fn deinit(self: *Self) void {
+        for (self.records.items) |*record| {
+            record.deinit(self.allocator);
+        }
+        self.records.deinit(self.allocator);
+    }
+
+    pub fn asLogSink(self: *Self) LogSink {
+        return .{
+            .ptr = @ptrCast(self),
+            .vtable = &vtable,
+        };
+    }
+
+    pub fn write(self: *Self, record: *const LogRecord) void {
+        self.appendOwnedRecord(record) catch {
+            self.dropped_records += 1;
+        };
+    }
+
+    pub fn flush(self: *Self) void {
+        self.flush_count += 1;
+    }
+
+    pub fn count(self: *const Self) usize {
+        return self.records.items.len;
+    }
+
+    pub fn latest(self: *const Self) ?*const StoredLogRecord {
+        if (self.records.items.len == 0) {
+            return null;
+        }
+        return &self.records.items[self.records.items.len - 1];
+    }
+
+    pub fn recordAt(self: *const Self, index: usize) ?*const StoredLogRecord {
+        if (index >= self.records.items.len) {
+            return null;
+        }
+        return &self.records.items[index];
+    }
+
+    fn appendOwnedRecord(self: *Self, record: *const LogRecord) !void {
+        if (self.capacity == 0) {
+            self.dropped_records += 1;
+            return;
+        }
+
+        if (self.records.items.len == self.capacity) {
+            var oldest = self.records.orderedRemove(0);
+            oldest.deinit(self.allocator);
+        }
+
+        try self.records.append(self.allocator, try StoredLogRecord.clone(self.allocator, record));
+    }
+
+    fn writeErased(ptr: *anyopaque, record: *const LogRecord) void {
+        const self: *Self = @ptrCast(@alignCast(ptr));
+        self.write(record);
+    }
+
+    fn flushErased(ptr: *anyopaque) void {
+        const self: *Self = @ptrCast(@alignCast(ptr));
+        self.flush();
+    }
+
+    fn deinitErased(ptr: *anyopaque) void {
+        const self: *Self = @ptrCast(@alignCast(ptr));
+        self.deinit();
+    }
+
+    fn nameErased(_: *anyopaque) []const u8 {
+        return "memory";
+    }
+};
+
+fn cloneOptionalString(allocator: std.mem.Allocator, value: ?[]const u8) !?[]const u8 {
+    if (value) |slice| {
+        return try allocator.dupe(u8, slice);
+    }
+    return null;
+}
+
+fn cloneFieldValue(allocator: std.mem.Allocator, value: LogFieldValue) !LogFieldValue {
+    return switch (value) {
+        .string => |slice| .{ .string = try allocator.dupe(u8, slice) },
+        .int => |number| .{ .int = number },
+        .uint => |number| .{ .uint = number },
+        .float => |number| .{ .float = number },
+        .bool => |flag| .{ .bool = flag },
+        .null => .null,
+    };
+}
+
+test "memory sink keeps only newest records within capacity" {
+    var sink = MemorySink.init(std.testing.allocator, 2);
+    defer sink.deinit();
+
+    const first = LogRecord{
+        .ts_unix_ms = 1,
+        .level = .info,
+        .subsystem = "runtime",
+        .message = "first",
+    };
+    const second = LogRecord{
+        .ts_unix_ms = 2,
+        .level = .warn,
+        .subsystem = "runtime",
+        .message = "second",
+    };
+    const third = LogRecord{
+        .ts_unix_ms = 3,
+        .level = .@"error",
+        .subsystem = "runtime",
+        .message = "third",
+    };
+
+    sink.write(&first);
+    sink.write(&second);
+    sink.write(&third);
+
+    try std.testing.expectEqual(@as(usize, 2), sink.count());
+    try std.testing.expectEqualStrings("second", sink.recordAt(0).?.message);
+    try std.testing.expectEqualStrings("third", sink.latest().?.message);
+}
+
+test "memory sink clones fields and supports erased interface" {
+    var sink = MemorySink.init(std.testing.allocator, 4);
+    defer sink.deinit();
+
+    const fields = [_]LogField{
+        LogField.string("path", "gateway.port"),
+        LogField.boolean("retryable", true),
+    };
+    const record = LogRecord{
+        .ts_unix_ms = 9,
+        .level = .info,
+        .subsystem = "config",
+        .message = "updated",
+        .trace_id = "trc_01",
+        .fields = fields[0..],
+    };
+
+    const log_sink = sink.asLogSink();
+    log_sink.write(&record);
+    log_sink.flush();
+
+    try std.testing.expectEqualStrings("memory", log_sink.name());
+    try std.testing.expectEqual(@as(usize, 1), sink.count());
+    try std.testing.expectEqual(@as(usize, 1), sink.flush_count);
+    try std.testing.expectEqualStrings("config", sink.latest().?.subsystem);
+    try std.testing.expectEqualStrings("gateway.port", sink.latest().?.fields[0].value.string);
+}

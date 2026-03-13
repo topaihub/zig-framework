@@ -1,0 +1,30 @@
+const std = @import("std");
+
+pub const MODULE_NAME = "observability";
+pub const observer = @import("observer.zig");
+pub const multi_observer = @import("multi_observer.zig");
+pub const log_observer = @import("log_observer.zig");
+pub const file_observer = @import("file_observer.zig");
+pub const metrics = @import("metrics.zig");
+
+pub const ObservedEvent = observer.ObservedEvent;
+pub const Observer = observer.Observer;
+pub const MemoryObserver = observer.MemoryObserver;
+pub const MultiObserver = multi_observer.MultiObserver;
+pub const LogObserver = log_observer.LogObserver;
+pub const JsonlFileObserver = file_observer.JsonlFileObserver;
+pub const MetricsSnapshot = metrics.MetricsSnapshot;
+pub const MetricsObserver = metrics.MetricsObserver;
+
+pub const ModuleStage = enum {
+    scaffold,
+};
+
+pub const MODULE_STAGE: ModuleStage = .scaffold;
+
+test "observability scaffold exports are stable" {
+    try std.testing.expectEqualStrings("observability", MODULE_NAME);
+    try std.testing.expect(MODULE_STAGE == .scaffold);
+    _ = MemoryObserver;
+    _ = MetricsObserver;
+}
