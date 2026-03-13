@@ -6,6 +6,9 @@ pub const ValidationValue = core.validation.ValidationValue;
 
 pub const ConfigValueParser = struct {
     pub fn parseRawValue(allocator: std.mem.Allocator, kind: ValueKind, raw: []const u8) anyerror!ValidationValue {
+        if (kind == .object or kind == .array) {
+            return parseJsonValue(allocator, kind, raw);
+        }
         return switch (kind) {
             .string, .enum_string => .{ .string = try allocator.dupe(u8, raw) },
             .integer => .{ .integer = try std.fmt.parseInt(i64, raw, 10) },
@@ -22,10 +25,87 @@ pub const ConfigValueParser = struct {
             .integer => .{ .integer = try std.fmt.parseInt(i64, trimmed, 10) },
             .boolean => .{ .boolean = try parseBoolean(trimmed) },
             .float => .{ .float = try std.fmt.parseFloat(f64, trimmed) },
-            .object, .array => error.UnsupportedValueKind,
+            .object => try parseJsonObjectValue(allocator, trimmed),
+            .array => try parseJsonArrayValue(allocator, trimmed),
+        };
+    }
+
+    pub fn parseJsonStdValue(allocator: std.mem.Allocator, kind: ValueKind, value: std.json.Value) anyerror!ValidationValue {
+        return switch (kind) {
+            .string, .enum_string => switch (value) {
+                .string => |text| .{ .string = try allocator.dupe(u8, text) },
+                else => error.InvalidJsonString,
+            },
+            .integer => switch (value) {
+                .integer => |number| .{ .integer = number },
+                else => error.InvalidJsonInteger,
+            },
+            .boolean => switch (value) {
+                .bool => |flag| .{ .boolean = flag },
+                else => error.InvalidBooleanValue,
+            },
+            .float => switch (value) {
+                .float => |number| .{ .float = number },
+                .integer => |number| .{ .float = @floatFromInt(number) },
+                else => error.InvalidJsonFloat,
+            },
+            .object => switch (value) {
+                .object => try convertJsonValue(allocator, value),
+                else => error.InvalidJsonObject,
+            },
+            .array => switch (value) {
+                .array => try convertJsonValue(allocator, value),
+                else => error.InvalidJsonArray,
+            },
         };
     }
 };
+
+fn parseJsonObjectValue(allocator: std.mem.Allocator, raw_json: []const u8) anyerror!ValidationValue {
+    const parsed = try std.json.parseFromSlice(std.json.Value, allocator, raw_json, .{});
+    defer parsed.deinit();
+    if (parsed.value != .object) return error.InvalidJsonObject;
+    return convertJsonValue(allocator, parsed.value);
+}
+
+fn parseJsonArrayValue(allocator: std.mem.Allocator, raw_json: []const u8) anyerror!ValidationValue {
+    const parsed = try std.json.parseFromSlice(std.json.Value, allocator, raw_json, .{});
+    defer parsed.deinit();
+    if (parsed.value != .array) return error.InvalidJsonArray;
+    return convertJsonValue(allocator, parsed.value);
+}
+
+fn convertJsonValue(allocator: std.mem.Allocator, value: std.json.Value) anyerror!ValidationValue {
+    return switch (value) {
+        .null => .null,
+        .bool => |flag| .{ .boolean = flag },
+        .integer => |number| .{ .integer = number },
+        .float => |number| .{ .float = number },
+        .number_string => |number| .{ .float = try std.fmt.parseFloat(f64, number) },
+        .string => |text| .{ .string = try allocator.dupe(u8, text) },
+        .array => |items| blk: {
+            const converted = try allocator.alloc(ValidationValue, items.items.len);
+            errdefer allocator.free(converted);
+            for (items.items, 0..) |item, index| {
+                converted[index] = try convertJsonValue(allocator, item);
+            }
+            break :blk .{ .array = converted };
+        },
+        .object => |object| blk: {
+            const fields = try allocator.alloc(core.validation.ValidationField, object.count());
+            errdefer allocator.free(fields);
+            var iterator = object.iterator();
+            var index: usize = 0;
+            while (iterator.next()) |entry| : (index += 1) {
+                fields[index] = .{
+                    .key = try allocator.dupe(u8, entry.key_ptr.*),
+                    .value = try convertJsonValue(allocator, entry.value_ptr.*),
+                };
+            }
+            break :blk .{ .object = fields };
+        },
+    };
+}
 
 fn parseBoolean(raw: []const u8) anyerror!bool {
     if (std.mem.eql(u8, raw, "true")) return true;
@@ -90,4 +170,14 @@ test "config parser parses scalar json values" {
     const bool_value = try ConfigValueParser.parseJsonValue(std.testing.allocator, .boolean, "true");
     defer bool_value.deinit(std.testing.allocator);
     try std.testing.expectEqual(true, bool_value.boolean);
+}
+
+test "config parser parses object and array json values" {
+    const object_value = try ConfigValueParser.parseJsonValue(std.testing.allocator, .object, "{\"enabled\":true,\"path\":\"app.log\"}");
+    defer object_value.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 2), object_value.object.len);
+
+    const array_value = try ConfigValueParser.parseJsonValue(std.testing.allocator, .array, "[\"openai\",\"anthropic\"]");
+    defer array_value.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 2), array_value.array.len);
 }
