@@ -49,3 +49,10 @@
 - `src/runtime/`
 - `src/app/`
 - `src/contracts/`
+
+## 文档入口
+
+- `framework/docs/README.md`
+- `framework/docs/architecture/logging.md`
+- `framework/docs/architecture/validation.md`
+- `framework/docs/architecture/runtime-pipeline.md`
