@@ -39,6 +39,7 @@ pub const MetricsObserver = observability.MetricsObserver;
 pub const TraceScope = observability.TraceScope;
 pub const RequestTrace = observability.RequestTrace;
 pub const StepTrace = observability.StepTrace;
+pub const MethodTrace = observability.MethodTrace;
 pub const LogLevel = core.logging.LogLevel;
 pub const LogField = core.logging.LogField;
 pub const LogFieldValue = core.logging.LogFieldValue;

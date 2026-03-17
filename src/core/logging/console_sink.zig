@@ -97,7 +97,7 @@ pub const ConsoleSink = struct {
                 const ts = try formatPrettyTimestamp(std.heap.page_allocator, record.ts_unix_ms);
                 defer std.heap.page_allocator.free(ts);
                 try writer.print("{s} {s: >5} ", .{ ts, prettyLevelText(record.level) });
-                if (!try renderPrettyRequestSpan(writer, record) and !try renderPrettyStepSpan(writer, record)) {
+                if (!try renderPrettyRequestSpan(writer, record) and !try renderPrettyMethodTrace(writer, record) and !try renderPrettyStepSpan(writer, record)) {
                     try writer.print("{s}: {s}", .{ record.subsystem, record.message });
                     try appendContext(writer, record);
                     try appendFieldPairs(writer, record.fields);
@@ -185,6 +185,20 @@ fn renderPrettyStepSpan(writer: anytype, record: *const LogRecord) !bool {
     try writer.print("{s}{{step={s}}}: {s}", .{ record.subsystem, step, record.message });
     try appendContext(writer, record);
     try appendFieldPairsSkipping(writer, record.fields, &.{"step"});
+    return true;
+}
+
+fn renderPrettyMethodTrace(writer: anytype, record: *const LogRecord) !bool {
+    if (!std.mem.eql(u8, record.subsystem, "method")) return false;
+    const method = fieldString(record.fields, "method") orelse return false;
+    if (!(std.mem.eql(u8, record.message, "ENTRY") or std.mem.eql(u8, record.message, "EXIT") or std.mem.eql(u8, record.message, "ERROR"))) return false;
+
+    if (record.trace_id) |trace_id| {
+        try writer.print("TraceId:{s}|{s}|{s}", .{ trace_id, record.message, method });
+    } else {
+        try writer.print("{s}|{s}", .{ record.message, method });
+    }
+    try appendFieldPairsSkipping(writer, record.fields, &.{"method"});
     return true;
 }
 
@@ -484,4 +498,44 @@ test "console sink pretty renders step trace style" {
     try std.testing.expect(std.mem.indexOf(u8, capture.stdout.items, "duration_ms=31") != null);
     try std.testing.expect(std.mem.indexOf(u8, capture.stdout.items, "beyond_threshold=true") != null);
     try std.testing.expect(std.mem.indexOf(u8, capture.stdout.items, "error_code=\"PROVIDER_TIMEOUT\"") != null);
+}
+
+test "console sink pretty renders method trace style" {
+    const Capture = struct {
+        allocator: std.mem.Allocator,
+        stdout: std.ArrayListUnmanaged(u8) = .empty,
+
+        fn deinit(self: *@This()) void {
+            self.stdout.deinit(self.allocator);
+        }
+
+        fn emit(ptr: *anyopaque, _: bool, bytes: []const u8) !void {
+            const self: *@This() = @ptrCast(@alignCast(ptr));
+            try self.stdout.appendSlice(self.allocator, bytes);
+        }
+    };
+
+    const record = LogRecord{
+        .ts_unix_ms = 22,
+        .level = .info,
+        .subsystem = "method",
+        .message = "EXIT",
+        .trace_id = "trc_01",
+        .fields = &.{
+            LogField.string("method", "Controller.Auth.Login"),
+            LogField.string("result", "Ok(200)"),
+            LogField.string("status", "SUCCESS"),
+            LogField.uint("duration_ms", 542),
+            LogField.string("type", "SYNC"),
+        },
+    };
+
+    var capture = Capture{ .allocator = std.testing.allocator };
+    defer capture.deinit();
+    var sink = ConsoleSink.init(.trace, .pretty);
+    sink.setEmitter(&capture, Capture.emit);
+    sink.write(&record);
+
+    try std.testing.expect(std.mem.indexOf(u8, capture.stdout.items, "TraceId:trc_01|EXIT|Controller.Auth.Login") != null);
+    try std.testing.expect(std.mem.indexOf(u8, capture.stdout.items, "result=\"Ok(200)\"") != null);
 }
