@@ -97,7 +97,7 @@ pub const ConsoleSink = struct {
                 const ts = try formatPrettyTimestamp(std.heap.page_allocator, record.ts_unix_ms);
                 defer std.heap.page_allocator.free(ts);
                 try writer.print("{s} {s: >5} ", .{ ts, prettyLevelText(record.level) });
-                if (!try renderPrettyRequestSpan(writer, record)) {
+                if (!try renderPrettyRequestSpan(writer, record) and !try renderPrettyStepSpan(writer, record)) {
                     try writer.print("{s}: {s}", .{ record.subsystem, record.message });
                     try appendContext(writer, record);
                     try appendFieldPairs(writer, record.fields);
@@ -175,6 +175,16 @@ fn renderPrettyRequestSpan(writer: anytype, record: *const LogRecord) !bool {
     try writer.print("}}: {s}", .{record.message});
     try appendContext(writer, record);
     try appendFieldPairsSkipping(writer, record.fields, &.{ "trace_id", "method", "path", "query" });
+    return true;
+}
+
+fn renderPrettyStepSpan(writer: anytype, record: *const LogRecord) !bool {
+    const step = fieldString(record.fields, "step") orelse return false;
+    if (!std.mem.eql(u8, record.message, "Step started") and !std.mem.eql(u8, record.message, "Step completed")) return false;
+
+    try writer.print("{s}{{step={s}}}: {s}", .{ record.subsystem, step, record.message });
+    try appendContext(writer, record);
+    try appendFieldPairsSkipping(writer, record.fields, &.{"step"});
     return true;
 }
 
@@ -433,4 +443,45 @@ test "console sink pretty renders request span style" {
     try std.testing.expect(std.mem.indexOf(u8, capture.stdout.items, "request{trace_id=abc123 method=GET path=/health query=None}: Request completed") != null);
     try std.testing.expect(std.mem.indexOf(u8, capture.stdout.items, "status=200") != null);
     try std.testing.expect(std.mem.indexOf(u8, capture.stdout.items, "duration_ms=4") != null);
+}
+
+test "console sink pretty renders step trace style" {
+    const Capture = struct {
+        allocator: std.mem.Allocator,
+        stdout: std.ArrayListUnmanaged(u8) = .empty,
+
+        fn deinit(self: *@This()) void {
+            self.stdout.deinit(self.allocator);
+        }
+
+        fn emit(ptr: *anyopaque, _: bool, bytes: []const u8) !void {
+            const self: *@This() = @ptrCast(@alignCast(ptr));
+            try self.stdout.appendSlice(self.allocator, bytes);
+        }
+    };
+
+    const record = LogRecord{
+        .ts_unix_ms = 22,
+        .level = .warn,
+        .subsystem = "runtime/provider",
+        .message = "Step completed",
+        .fields = &.{
+            LogField.string("step", "request"),
+            LogField.uint("duration_ms", 31),
+            LogField.boolean("beyond_threshold", true),
+            LogField.uint("threshold_ms", 10),
+            LogField.string("error_code", "PROVIDER_TIMEOUT"),
+        },
+    };
+
+    var capture = Capture{ .allocator = std.testing.allocator };
+    defer capture.deinit();
+    var sink = ConsoleSink.init(.trace, .pretty);
+    sink.setEmitter(&capture, Capture.emit);
+    sink.write(&record);
+
+    try std.testing.expect(std.mem.indexOf(u8, capture.stdout.items, "runtime/provider{step=request}: Step completed") != null);
+    try std.testing.expect(std.mem.indexOf(u8, capture.stdout.items, "duration_ms=31") != null);
+    try std.testing.expect(std.mem.indexOf(u8, capture.stdout.items, "beyond_threshold=true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, capture.stdout.items, "error_code=\"PROVIDER_TIMEOUT\"") != null);
 }
