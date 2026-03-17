@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("../core/root.zig");
 const contracts = @import("../contracts/root.zig");
 const observer_model = @import("../observability/observer.zig");
+const observability = @import("../observability/root.zig");
 const event_bus_model = @import("../runtime/event_bus.zig");
 const command_types = @import("command_types.zig");
 const command_context = @import("command_context.zig");
@@ -256,12 +257,22 @@ pub const CommandDispatcher = struct {
             .validated_params = request.params,
         };
 
+        const params_summary = summarizeParamsJson(self.allocator, request.params) catch try self.allocator.dupe(u8, "{}");
+        defer self.allocator.free(params_summary);
+        const method_name = try std.fmt.allocPrint(self.allocator, "Command.{s}", .{command.method});
+        defer self.allocator.free(method_name);
+        var method_trace = try observability.MethodTrace.begin(self.allocator, ctx.logger.logger, method_name, params_summary, 250);
+        defer method_trace.deinit();
+
         const result_json = handler(&ctx) catch |err| {
             const app_error = core.error_model.fromInternalError(err, .{ .target = command.method });
+            method_trace.finishError(@errorName(err), app_error.code, false);
             self.logFailure("command failed", request, app_error.code);
             try self.emitCommandEvent("command.failed", request, command, app_error.code, null, elapsedSince(started_at_ms));
             return CommandEnvelope.failure(app_error, self.metaForRequest(request));
         };
+
+        method_trace.finishSuccess(summarizeResultJson(result_json), false);
 
         self.logInfo("command completed", request, command, null);
         try self.emitCommandEvent("command.completed", request, command, null, null, elapsedSince(started_at_ms));
@@ -395,6 +406,30 @@ pub const CommandDispatcher = struct {
                 LogField.string("error_code", error_code),
             });
         }
+    }
+
+    fn summarizeParamsJson(allocator: std.mem.Allocator, fields: []const ValidationField) anyerror![]const u8 {
+        var buf: std.ArrayListUnmanaged(u8) = .empty;
+        defer buf.deinit(allocator);
+        const writer = buf.writer(allocator);
+        try writer.writeByte('{');
+        for (fields, 0..) |field, index| {
+            if (index > 0) try writer.writeByte(',');
+            try writer.print("\"{s}\":", .{field.key});
+            switch (field.value) {
+                .string => |value| try writer.print("\"{s}\"", .{value}),
+                .integer => |value| try writer.print("{d}", .{value}),
+                .boolean => |value| try writer.writeAll(if (value) "true" else "false"),
+                else => try writer.writeAll("null"),
+            }
+        }
+        try writer.writeByte('}');
+        return allocator.dupe(u8, buf.items);
+    }
+
+    fn summarizeResultJson(result_json: []const u8) []const u8 {
+        if (result_json.len <= 96) return result_json;
+        return result_json[0..96];
     }
 
     fn logInfo(self: *const Self, message: []const u8, request: CommandRequest, command: ?*const CommandDefinition, task_id: ?[]const u8) void {
