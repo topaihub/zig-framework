@@ -94,12 +94,9 @@ pub const ConsoleSink = struct {
                 try appendFieldPairs(writer, record.fields);
             },
             .pretty => {
-                try writer.print("{d} | {s: >5} | {s} | {s}", .{
-                    record.ts_unix_ms,
-                    record.level.asText(),
-                    record.subsystem,
-                    record.message,
-                });
+                const ts = try formatPrettyTimestamp(std.heap.page_allocator, record.ts_unix_ms);
+                defer std.heap.page_allocator.free(ts);
+                try writer.print("{s} {s: >5} {s}: {s}", .{ ts, prettyLevelText(record.level), record.subsystem, record.message });
                 try appendContext(writer, record);
                 try appendFieldPairs(writer, record.fields);
             },
@@ -158,6 +155,103 @@ fn appendContext(writer: anytype, record: *const LogRecord) !void {
     if (record.duration_ms) |duration_ms| {
         try writer.print(" duration_ms={d}", .{duration_ms});
     }
+}
+
+fn prettyLevelText(level: LogLevel) []const u8 {
+    return switch (level) {
+        .trace => "TRACE",
+        .debug => "DEBUG",
+        .info => "INFO",
+        .warn => "WARN",
+        .@"error" => "ERROR",
+        .fatal => "FATAL",
+        .silent => "SILENT",
+    };
+}
+
+fn formatPrettyTimestamp(allocator: std.mem.Allocator, ts_unix_ms: i64) ![]u8 {
+    const seconds = @divFloor(ts_unix_ms, 1000);
+    const millis = @mod(ts_unix_ms, 1000);
+    const epoch_seconds: u64 = @intCast(seconds);
+    const day_seconds = 86_400;
+    const days_since_epoch = @divFloor(epoch_seconds, day_seconds);
+    const secs_of_day = epoch_seconds % day_seconds;
+
+    const date = civilFromDays(@as(i64, @intCast(days_since_epoch)));
+    const hour = secs_of_day / 3600;
+    const minute = (secs_of_day % 3600) / 60;
+    const second = secs_of_day % 60;
+
+    var buf: std.ArrayListUnmanaged(u8) = .empty;
+    defer buf.deinit(allocator);
+    const writer = buf.writer(allocator);
+
+    const year: u64 = @intCast(date.year);
+    const month: u8 = date.month;
+    const day: u8 = date.day;
+    try appendPaddedUnsigned(writer, year, 4);
+    try writer.writeByte('-');
+    try appendPaddedUnsigned(writer, month, 2);
+    try writer.writeByte('-');
+    try appendPaddedUnsigned(writer, day, 2);
+    try writer.writeByte('T');
+    try appendPaddedUnsigned(writer, hour, 2);
+    try writer.writeByte(':');
+    try appendPaddedUnsigned(writer, minute, 2);
+    try writer.writeByte(':');
+    try appendPaddedUnsigned(writer, second, 2);
+    try writer.writeByte('.');
+    try appendPaddedUnsigned(writer, millis, 3);
+    try writer.writeByte('Z');
+
+    return allocator.dupe(u8, buf.items);
+}
+
+const CivilDate = struct {
+    year: i64,
+    month: u8,
+    day: u8,
+};
+
+fn civilFromDays(z: i64) CivilDate {
+    const z_adj = z + 719468;
+    const era = @divFloor(if (z_adj >= 0) z_adj else z_adj - 146096, 146097);
+    const doe = z_adj - era * 146097;
+    const yoe = @divFloor(doe - @divFloor(doe, 1460) + @divFloor(doe, 36524) - @divFloor(doe, 146096), 365);
+    const y = yoe + era * 400;
+    const doy = doe - (365 * yoe + @divFloor(yoe, 4) - @divFloor(yoe, 100));
+    const mp = @divFloor(5 * doy + 2, 153);
+    const d: i64 = doy - @divFloor(153 * mp + 2, 5) + 1;
+    const m: i64 = mp + (if (mp < 10) @as(i64, 3) else @as(i64, -9));
+    return .{
+        .year = y + (if (m <= 2) @as(i64, 1) else @as(i64, 0)),
+        .month = @intCast(m),
+        .day = @intCast(d),
+    };
+}
+
+fn appendPaddedUnsigned(writer: anytype, value: anytype, width: usize) !void {
+    var buffer: [20]u8 = undefined;
+    var current = @as(u64, @intCast(value));
+    var index: usize = buffer.len;
+
+    if (current == 0) {
+        index -= 1;
+        buffer[index] = '0';
+    } else {
+        while (current > 0) {
+            index -= 1;
+            buffer[index] = @as(u8, @intCast('0' + (current % 10)));
+            current /= 10;
+        }
+    }
+
+    const digits = buffer.len - index;
+    var pad: usize = width;
+    while (pad > digits) : (pad -= 1) {
+        try writer.writeByte('0');
+    }
+    try writer.writeAll(buffer[index..]);
 }
 
 fn appendFieldPairs(writer: anytype, fields: []const LogField) !void {
@@ -253,6 +347,7 @@ test "console sink pretty and compact output differ" {
     compact_sink.setEmitter(&compact_capture, Capture.emit);
     compact_sink.write(&record);
 
-    try std.testing.expect(std.mem.indexOf(u8, pretty_capture.stdout.items, "| config | field updated") != null);
+    try std.testing.expect(std.mem.indexOf(u8, pretty_capture.stdout.items, "INFO config: field updated") != null);
+    try std.testing.expect(std.mem.indexOf(u8, pretty_capture.stdout.items, "1970-01-01T00:00:00.022Z") != null);
     try std.testing.expect(std.mem.indexOf(u8, compact_capture.stdout.items, "[info] config: field updated") != null);
 }
