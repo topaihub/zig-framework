@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const core = @import("../core/root.zig");
 const config_model = @import("../config/root.zig");
 const observability = @import("../observability/root.zig");
@@ -8,6 +9,10 @@ const task_runner_model = @import("task_runner.zig");
 
 pub const LogLevel = core.logging.LogLevel;
 pub const MemorySink = core.logging.MemorySink;
+pub const ConsoleSink = core.logging.ConsoleSink;
+pub const ConsoleStyle = core.logging.ConsoleStyle;
+pub const JsonlFileSink = core.logging.JsonlFileSink;
+pub const MultiSink = core.logging.MultiSink;
 pub const Logger = core.logging.Logger;
 pub const Observer = observability.Observer;
 pub const MemoryObserver = observability.MemoryObserver;
@@ -31,6 +36,10 @@ pub const MemoryConfigSideEffectSink = config_model.MemoryConfigSideEffectSink;
 
 pub const AppBootstrapConfig = struct {
     log_level: LogLevel = .info,
+    console_log_enabled: bool = !builtin.is_test,
+    console_log_style: ConsoleStyle = .pretty,
+    log_file_path: ?[]const u8 = null,
+    log_file_max_bytes: ?u64 = 8 * 1024 * 1024,
     memory_log_capacity: usize = 256,
     observer_log_subsystem: []const u8 = "observer",
     observer_file_path: ?[]const u8 = null,
@@ -41,6 +50,9 @@ pub const AppBootstrapConfig = struct {
 pub const AppContext = struct {
     allocator: std.mem.Allocator,
     memory_sink: *MemorySink,
+    console_sink: ?*ConsoleSink,
+    logger_file_sink: ?*JsonlFileSink,
+    logger_multi_sink: ?*MultiSink,
     logger: *Logger,
     memory_observer: *MemoryObserver,
     metrics_observer: *MetricsObserver,
@@ -61,9 +73,39 @@ pub const AppContext = struct {
         errdefer allocator.destroy(memory_sink);
         memory_sink.* = MemorySink.init(allocator, config.memory_log_capacity);
 
+        var console_sink: ?*ConsoleSink = null;
+        if (config.console_log_enabled) {
+            const instance = try allocator.create(ConsoleSink);
+            errdefer allocator.destroy(instance);
+            instance.* = ConsoleSink.init(config.log_level, config.console_log_style);
+            console_sink = instance;
+        }
+
+        var logger_file_sink: ?*JsonlFileSink = null;
+        if (config.log_file_path) |log_file_path| {
+            const instance = try allocator.create(JsonlFileSink);
+            errdefer allocator.destroy(instance);
+            instance.* = try JsonlFileSink.init(allocator, log_file_path, config.log_file_max_bytes);
+            logger_file_sink = instance;
+        }
+
+        var logger_multi_sink: ?*MultiSink = null;
+        if (console_sink != null or logger_file_sink != null) {
+            var sinks: std.ArrayListUnmanaged(core.logging.LogSink) = .empty;
+            defer sinks.deinit(allocator);
+            try sinks.append(allocator, memory_sink.asLogSink());
+            if (console_sink) |instance| try sinks.append(allocator, instance.asLogSink());
+            if (logger_file_sink) |instance| try sinks.append(allocator, instance.asLogSink());
+
+            const instance = try allocator.create(MultiSink);
+            errdefer allocator.destroy(instance);
+            instance.* = try MultiSink.init(allocator, sinks.items);
+            logger_multi_sink = instance;
+        }
+
         const logger = try allocator.create(Logger);
         errdefer allocator.destroy(logger);
-        logger.* = Logger.init(memory_sink.asLogSink(), config.log_level);
+        logger.* = Logger.init(if (logger_multi_sink) |instance| instance.asLogSink() else memory_sink.asLogSink(), config.log_level);
 
         const memory_observer = try allocator.create(MemoryObserver);
         errdefer allocator.destroy(memory_observer);
@@ -126,6 +168,9 @@ pub const AppContext = struct {
         return .{
             .allocator = allocator,
             .memory_sink = memory_sink,
+            .console_sink = console_sink,
+            .logger_file_sink = logger_file_sink,
+            .logger_multi_sink = logger_multi_sink,
             .logger = logger,
             .memory_observer = memory_observer,
             .metrics_observer = metrics_observer,
@@ -183,6 +228,21 @@ pub const AppContext = struct {
         self.logger.deinit();
         self.allocator.destroy(self.logger);
 
+        if (self.logger_multi_sink) |logger_multi_sink| {
+            logger_multi_sink.deinit();
+            self.allocator.destroy(logger_multi_sink);
+        }
+
+        if (self.logger_file_sink) |logger_file_sink| {
+            logger_file_sink.deinit();
+            self.allocator.destroy(logger_file_sink);
+        }
+
+        if (self.console_sink) |console_sink| {
+            console_sink.deinit();
+            self.allocator.destroy(console_sink);
+        }
+
         self.memory_sink.deinit();
         self.allocator.destroy(self.memory_sink);
     }
@@ -238,6 +298,17 @@ test "app context initializes and exposes assembled runtime services" {
     try std.testing.expect(app_context.command_registry.count() == 0);
     try std.testing.expectEqual(@as(usize, 0), app_context.memory_observer.count());
     try std.testing.expectEqual(@as(usize, 0), app_context.event_bus.count());
+}
+
+test "app context can wire console logger sink when enabled" {
+    var app_context = try AppContext.init(std.testing.allocator, .{
+        .console_log_enabled = true,
+        .console_log_style = .pretty,
+    });
+    defer app_context.deinit();
+
+    try std.testing.expect(app_context.console_sink != null);
+    try std.testing.expect(app_context.logger_multi_sink != null);
 }
 
 test "app context can dispatch commands through assembled dependencies" {
