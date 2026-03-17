@@ -1,6 +1,7 @@
 const std = @import("std");
 const core = @import("../core/root.zig");
 const app = @import("../app/root.zig");
+const trace_scope = @import("trace_scope.zig");
 
 pub const Logger = core.logging.Logger;
 pub const LogField = core.logging.LogField;
@@ -8,6 +9,7 @@ pub const RequestSource = app.RequestSource;
 
 pub const RequestTrace = struct {
     allocator: std.mem.Allocator,
+    logger: *Logger,
     trace_id: []u8,
     started_at_ms: i64,
     source: RequestSource,
@@ -15,8 +17,16 @@ pub const RequestTrace = struct {
     method: []const u8,
     path_or_target: []const u8,
     query: ?[]const u8 = null,
+    previous_provider: ?core.logging.TraceContextProvider = null,
+    previous_context: core.logging.TraceContext = .{},
 
     pub fn deinit(self: *RequestTrace) void {
+        if (self.previous_context.trace_id != null or self.previous_context.request_id != null or self.previous_context.span_id != null) {
+            trace_scope.set(self.previous_context);
+        } else {
+            trace_scope.clear();
+        }
+        self.logger.trace_context_provider = self.previous_provider;
         self.allocator.free(self.trace_id);
     }
 };
@@ -25,6 +35,7 @@ pub fn begin(allocator: std.mem.Allocator, logger: *Logger, source: RequestSourc
     const trace_id = try generateTraceId(allocator);
     const trace = RequestTrace{
         .allocator = allocator,
+        .logger = logger,
         .trace_id = trace_id,
         .started_at_ms = std.time.milliTimestamp(),
         .source = source,
@@ -32,7 +43,11 @@ pub fn begin(allocator: std.mem.Allocator, logger: *Logger, source: RequestSourc
         .method = method,
         .path_or_target = path_or_target,
         .query = query,
+        .previous_provider = logger.trace_context_provider,
+        .previous_context = trace_scope.current(),
     };
+    logger.trace_context_provider = trace_scope.provider();
+    trace_scope.set(.{ .trace_id = trace.trace_id, .request_id = trace.request_id, .span_id = null });
     logStarted(logger, &trace);
     return trace;
 }
