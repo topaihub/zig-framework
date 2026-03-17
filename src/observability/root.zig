@@ -6,6 +6,7 @@ pub const multi_observer = @import("multi_observer.zig");
 pub const log_observer = @import("log_observer.zig");
 pub const file_observer = @import("file_observer.zig");
 pub const metrics = @import("metrics.zig");
+pub const request_trace = @import("request_trace.zig");
 
 pub const ObservedEvent = observer.ObservedEvent;
 pub const Observer = observer.Observer;
@@ -15,6 +16,7 @@ pub const LogObserver = log_observer.LogObserver;
 pub const JsonlFileObserver = file_observer.JsonlFileObserver;
 pub const MetricsSnapshot = metrics.MetricsSnapshot;
 pub const MetricsObserver = metrics.MetricsObserver;
+pub const RequestTrace = request_trace.RequestTrace;
 
 pub const ModuleStage = enum {
     scaffold,
