@@ -36,6 +36,7 @@ pub const LogObserver = observability.LogObserver;
 pub const JsonlFileObserver = observability.JsonlFileObserver;
 pub const MetricsSnapshot = observability.MetricsSnapshot;
 pub const MetricsObserver = observability.MetricsObserver;
+pub const TraceScope = observability.TraceScope;
 pub const RequestTrace = observability.RequestTrace;
 pub const StepTrace = observability.StepTrace;
 pub const LogLevel = core.logging.LogLevel;
