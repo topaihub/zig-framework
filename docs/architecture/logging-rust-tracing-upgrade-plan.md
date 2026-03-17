@@ -623,3 +623,116 @@ HTTP / bridge / CLI 等入口都应逐步具备：
 - 原始 Task 1 ~ Task 6 已经开始实施并已推进多项
 - 本节补的是你后来明确要求的“下一步增强项”
 - 后续继续开发时，应优先按本节新增的 Task 7 ~ Task 9 往下做
+
+---
+
+## 10. 进一步增强：Trace Context Propagation（新增）
+
+这一节对应一个在实际运行中已经暴露出来的关键缺口：
+
+> 现在 request started/completed 日志已经有 `trace_id`，但下层 `StepTrace` 日志还不能自动继承同一个 `trace_id`，因此还不能像 Rust `tracing` 那样一眼看出“这个方法日志属于哪个请求”。
+
+### 10.1 新增需求
+
+#### Requirement 10：请求级 `trace_id` 必须自动向下传播到步骤级日志
+
+系统必须支持从 request 入口创建 trace scope，并让同一请求内的步骤级日志自动继承：
+
+- `trace_id`
+- `request_id`
+- 可选 `span_id`
+
+要求：
+
+- `StepTrace` 不应要求业务代码每次手工传入 `trace_id`
+- HTTP / bridge / CLI 入口创建的 request trace 应自动影响后续 logger 输出
+
+#### Requirement 11：Logger 必须支持运行中的 trace scope provider
+
+`Logger` 不能只停留在“可接受 provider”这一层，而必须真正接到一个运行中的上下文提供器，用来读取当前请求 scope。
+
+#### Requirement 12：多层调用日志必须可关联到单一请求
+
+最终输出中，至少应能看到：
+
+- request started/completed
+- middleware step
+- service/usecase step
+
+这些日志共享同一个 `trace_id`，从而支持人和机器进行完整链路关联。
+
+### 10.2 新增设计
+
+#### 设计 A：Thread-local Trace Scope
+
+增加一个运行时 trace scope 机制，最小可行方案为：
+
+- 线程本地存储当前 `TraceContext`
+- request 入口在开始时 `enter`
+- request 完成时 `exit`
+- `Logger` 默认从当前 scope 中读取上下文
+
+这样：
+
+- request 日志不需要手工重复传 `trace_id`
+- `StepTrace` 也不需要额外参数，即可自动继承上下文
+
+#### 设计 B：RequestTrace 与 Scope 绑定
+
+`request_trace.begin()` 除了生成 started 日志之外，还必须：
+
+- 安装当前 `TraceContext`
+- 让同线程内的 logger 能自动感知它
+
+`request_trace.complete()` 或显式结束时则解除绑定。
+
+#### 设计 C：StepTrace 自动继承上下文
+
+`StepTrace` 本身不负责生成新的 `trace_id`，而是依赖 logger 的上下文传播机制自动拿到：
+
+- `trace_id`
+- `request_id`
+- `span_id`
+
+从而在 pretty / json / compact 输出中都能自然出现。
+
+### 10.3 新增任务
+
+#### Task 10：实现 trace context propagation
+
+目标：
+
+- 增加真正可运行的 trace scope/provider
+- 让 request trace 进入作用域
+- 让 logger 自动读到当前 trace context
+
+涉及文件：
+
+- `framework/src/core/logging/logger.zig`
+- `framework/src/observability/request_trace.zig`
+- 新增 `framework/src/observability/trace_scope.zig`（或等价文件）
+
+完成标准：
+
+- request started/completed 与同请求内的 step 日志共享同一 `trace_id`
+- 不要求业务代码手工把 `trace_id` 传给 `StepTrace`
+
+#### Task 11：验证多层调用 trace 贯通
+
+目标：
+
+- 用最小可运行 demo 或单元测试证明：
+  - request
+  - middleware step
+  - service step
+ 共享同一 `trace_id`
+
+完成标准：
+
+- 真实运行输出中可以直接观察到多层日志共享同一个 `trace_id`
+
+### 10.4 状态说明
+
+这部分在当前文档中属于**新增增强项**，在本节补齐之前并没有形成正式 requirement/design/task。
+
+从现在开始，后续继续做方案 B 时，应优先按这里的 `Requirement 10 ~ 12` 与 `Task 10 ~ 11` 推进。
