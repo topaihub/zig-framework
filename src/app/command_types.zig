@@ -39,6 +39,8 @@ pub const CommandRequest = struct {
     method: []const u8,
     params: []const ValidationField,
     source: RequestSource,
+    trace_id: ?[]const u8 = null,
+    span_id: ?[]const u8 = null,
     authority: Authority = .public,
     timeout_ms: ?u32 = null,
 };

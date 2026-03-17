@@ -344,16 +344,20 @@ pub const CommandDispatcher = struct {
     fn requestContextFor(self: *const Self, request: CommandRequest) RequestContext {
         var request_context = RequestContext{
             .request_id = request.request_id,
+            .trace_id = request.trace_id,
+            .span_id = request.span_id,
             .source = request.source,
             .authority = request.authority,
             .timeout_ms = request.timeout_ms,
         };
 
         if (self.logger) |logger| {
-            if (logger.trace_context_provider) |provider| {
-                const trace_context = provider.getCurrent();
-                request_context.trace_id = trace_context.trace_id;
-                request_context.span_id = trace_context.span_id;
+            if (request_context.trace_id == null) {
+                if (logger.trace_context_provider) |provider| {
+                    const trace_context = provider.getCurrent();
+                    request_context.trace_id = trace_context.trace_id;
+                    request_context.span_id = trace_context.span_id;
+                }
             }
         }
 
