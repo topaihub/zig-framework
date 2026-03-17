@@ -163,18 +163,27 @@ fn appendContext(writer: anytype, record: *const LogRecord) !void {
 fn renderPrettyRequestSpan(writer: anytype, record: *const LogRecord) !bool {
     if (!std.mem.eql(u8, record.subsystem, "request")) return false;
 
-    const trace_id = fieldString(record.fields, "trace_id") orelse return false;
+    const trace_id = record.trace_id orelse return false;
     const method = fieldString(record.fields, "method") orelse return false;
     const path = fieldString(record.fields, "path") orelse return false;
     const query = fieldString(record.fields, "query");
 
-    try writer.print("request{{trace_id={s} method={s} path={s}", .{ trace_id, method, path });
+    try writer.print("request{{trace_id={s}", .{trace_id});
+    if (record.request_id) |request_id| {
+        try writer.print(" request_id={s}", .{request_id});
+    }
+    try writer.print(" method={s} path={s}", .{ method, path });
     if (query) |value| {
         try writer.print(" query={s}", .{value});
     }
     try writer.print("}}: {s}", .{record.message});
-    try appendContext(writer, record);
-    try appendFieldPairsSkipping(writer, record.fields, &.{ "trace_id", "method", "path", "query" });
+    if (record.error_code) |error_code| {
+        try writer.print(" error_code={s}", .{error_code});
+    }
+    if (record.duration_ms) |duration_ms| {
+        try writer.print(" duration_ms={d}", .{duration_ms});
+    }
+    try appendFieldPairsSkipping(writer, record.fields, &.{ "method", "path", "query" });
     return true;
 }
 
@@ -438,8 +447,9 @@ test "console sink pretty renders request span style" {
         .level = .info,
         .subsystem = "request",
         .message = "Request completed",
+        .trace_id = "trc_01",
+        .request_id = "req_01",
         .fields = &.{
-            LogField.string("trace_id", "abc123"),
             LogField.string("method", "GET"),
             LogField.string("path", "/health"),
             LogField.string("query", "None"),
@@ -454,7 +464,7 @@ test "console sink pretty renders request span style" {
     sink.setEmitter(&capture, Capture.emit);
     sink.write(&record);
 
-    try std.testing.expect(std.mem.indexOf(u8, capture.stdout.items, "request{trace_id=abc123 method=GET path=/health query=None}: Request completed") != null);
+    try std.testing.expect(std.mem.indexOf(u8, capture.stdout.items, "request{trace_id=trc_01 request_id=req_01 method=GET path=/health query=None}: Request completed") != null);
     try std.testing.expect(std.mem.indexOf(u8, capture.stdout.items, "status=200") != null);
     try std.testing.expect(std.mem.indexOf(u8, capture.stdout.items, "duration_ms=4") != null);
 }
