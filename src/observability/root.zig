@@ -6,6 +6,7 @@ pub const multi_observer = @import("multi_observer.zig");
 pub const log_observer = @import("log_observer.zig");
 pub const file_observer = @import("file_observer.zig");
 pub const metrics = @import("metrics.zig");
+pub const trace_scope = @import("trace_scope.zig");
 pub const request_trace = @import("request_trace.zig");
 pub const step_trace = @import("step_trace.zig");
 
@@ -17,6 +18,7 @@ pub const LogObserver = log_observer.LogObserver;
 pub const JsonlFileObserver = file_observer.JsonlFileObserver;
 pub const MetricsSnapshot = metrics.MetricsSnapshot;
 pub const MetricsObserver = metrics.MetricsObserver;
+pub const TraceScope = trace_scope;
 pub const RequestTrace = request_trace.RequestTrace;
 pub const StepTrace = step_trace.StepTrace;
 
