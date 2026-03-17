@@ -21,7 +21,12 @@
 - 远程日志采集后端实现
 - GUI 最终展示样式
 
-> 当前共享实现已先落在 `framework/src/core/logging/*`。截至 2026-03-11，`level.zig`、`record.zig`、`sink.zig`、`memory_sink.zig`、`console_sink.zig`、`file_sink.zig`、`multi_sink.zig`、`redact.zig`、`logger.zig` 已有第一版实现；`Logger` 也已补上 trace 上下文自动注入接口。
+> 当前共享实现已先落在 `framework/src/core/logging/*`。截至 2026-03-17，`level.zig`、`record.zig`、`sink.zig`、`memory_sink.zig`、`console_sink.zig`、`file_sink.zig`、`multi_sink.zig`、`redact.zig`、`logger.zig` 已有第一版实现；`Logger` 已补 trace 上下文自动注入接口，`ConsoleSink.pretty` 也已升级为 ISO8601 + `LEVEL subsystem: message` 风格。
+
+> 同时，`framework/src/observability/request_trace.zig` 与 `framework/src/observability/step_trace.zig` 已落第一版：
+>
+> - `request_trace`：用于适配器层 started/completed request 日志
+> - `step_trace`：用于步骤级耗时/阈值/错误日志
 
 ## 2. 设计目标
 
@@ -77,6 +82,19 @@
 - `subsystem`
 - `request_id`
 
+### 3.6 请求级与步骤级分层
+
+当前实现已开始按两层组织：
+
+- 请求级：`request_trace`
+  - 负责 `Request started / Request completed`
+  - 负责 `trace_id / request_id / method / path / status / duration_ms`
+- 步骤级：`step_trace`
+  - 负责单步骤 `Step started / Step completed`
+  - 负责 `duration_ms / threshold_ms / beyond_threshold / error_code`
+
+这两层是互补关系，不应混成一层。
+
 ## 4. 模块边界
 
 建议模块结构如下：
@@ -107,6 +125,8 @@ src/core/logging/
 - `memory_sink.zig`：测试与运行时缓存使用
 - `multi_sink.zig`：多 sink 扇出
 - `redact.zig`：字段级脱敏策略
+- `../observability/request_trace.zig`：请求级 started/completed trace helper
+- `../observability/step_trace.zig`：步骤级耗时/阈值/错误 trace helper
 
 ## 5. 核心数据模型
 
@@ -258,6 +278,20 @@ pub const SubsystemLogger = struct {
 - 测试时可整体替换为 memory sink
 
 ## 7. Sink 抽象设计
+
+## 7.1 当前默认装配状态
+
+截至 2026-03-17，`framework/src/runtime/app_context.zig` 已补默认日志装配：
+
+- 默认继续保留 `MemorySink`
+- 非测试环境下默认附加 `ConsoleSink.pretty`
+- 支持可选 `JsonlFileSink`
+- 通过 `MultiSink` 扇出到 memory/console/file
+
+这意味着：
+
+- 测试环境不默认刷控制台
+- 应用运行时已经可以天然拿到更接近 Rust 风格的 console 输出
 
 ## 7.1 基础接口
 
