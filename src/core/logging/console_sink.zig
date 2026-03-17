@@ -96,9 +96,12 @@ pub const ConsoleSink = struct {
             .pretty => {
                 const ts = try formatPrettyTimestamp(std.heap.page_allocator, record.ts_unix_ms);
                 defer std.heap.page_allocator.free(ts);
-                try writer.print("{s} {s: >5} {s}: {s}", .{ ts, prettyLevelText(record.level), record.subsystem, record.message });
-                try appendContext(writer, record);
-                try appendFieldPairs(writer, record.fields);
+                try writer.print("{s} {s: >5} ", .{ ts, prettyLevelText(record.level) });
+                if (!try renderPrettyRequestSpan(writer, record)) {
+                    try writer.print("{s}: {s}", .{ record.subsystem, record.message });
+                    try appendContext(writer, record);
+                    try appendFieldPairs(writer, record.fields);
+                }
             },
         }
 
@@ -155,6 +158,35 @@ fn appendContext(writer: anytype, record: *const LogRecord) !void {
     if (record.duration_ms) |duration_ms| {
         try writer.print(" duration_ms={d}", .{duration_ms});
     }
+}
+
+fn renderPrettyRequestSpan(writer: anytype, record: *const LogRecord) !bool {
+    if (!std.mem.eql(u8, record.subsystem, "request")) return false;
+
+    const trace_id = fieldString(record.fields, "trace_id") orelse return false;
+    const method = fieldString(record.fields, "method") orelse return false;
+    const path = fieldString(record.fields, "path") orelse return false;
+    const query = fieldString(record.fields, "query");
+
+    try writer.print("request{{trace_id={s} method={s} path={s}", .{ trace_id, method, path });
+    if (query) |value| {
+        try writer.print(" query={s}", .{value});
+    }
+    try writer.print("}}: {s}", .{record.message});
+    try appendContext(writer, record);
+    try appendFieldPairsSkipping(writer, record.fields, &.{ "trace_id", "method", "path", "query" });
+    return true;
+}
+
+fn fieldString(fields: []const LogField, key: []const u8) ?[]const u8 {
+    for (fields) |field| {
+        if (!std.mem.eql(u8, field.key, key)) continue;
+        return switch (field.value) {
+            .string => |text| text,
+            else => null,
+        };
+    }
+    return null;
 }
 
 fn prettyLevelText(level: LogLevel) []const u8 {
@@ -261,6 +293,16 @@ fn appendFieldPairs(writer: anytype, fields: []const LogField) !void {
     }
 }
 
+fn appendFieldPairsSkipping(writer: anytype, fields: []const LogField, skipped: []const []const u8) !void {
+    field_loop: for (fields) |field| {
+        for (skipped) |key| {
+            if (std.mem.eql(u8, field.key, key)) continue :field_loop;
+        }
+        try writer.print(" {s}=", .{field.key});
+        try appendFieldValue(writer, field.value);
+    }
+}
+
 fn appendFieldValue(writer: anytype, value: LogFieldValue) !void {
     switch (value) {
         .string => |text| try writer.print("\"{s}\"", .{text}),
@@ -350,4 +392,45 @@ test "console sink pretty and compact output differ" {
     try std.testing.expect(std.mem.indexOf(u8, pretty_capture.stdout.items, "INFO config: field updated") != null);
     try std.testing.expect(std.mem.indexOf(u8, pretty_capture.stdout.items, "1970-01-01T00:00:00.022Z") != null);
     try std.testing.expect(std.mem.indexOf(u8, compact_capture.stdout.items, "[info] config: field updated") != null);
+}
+
+test "console sink pretty renders request span style" {
+    const Capture = struct {
+        allocator: std.mem.Allocator,
+        stdout: std.ArrayListUnmanaged(u8) = .empty,
+
+        fn deinit(self: *@This()) void {
+            self.stdout.deinit(self.allocator);
+        }
+
+        fn emit(ptr: *anyopaque, _: bool, bytes: []const u8) !void {
+            const self: *@This() = @ptrCast(@alignCast(ptr));
+            try self.stdout.appendSlice(self.allocator, bytes);
+        }
+    };
+
+    const record = LogRecord{
+        .ts_unix_ms = 22,
+        .level = .info,
+        .subsystem = "request",
+        .message = "Request completed",
+        .fields = &.{
+            LogField.string("trace_id", "abc123"),
+            LogField.string("method", "GET"),
+            LogField.string("path", "/health"),
+            LogField.string("query", "None"),
+            LogField.uint("status", 200),
+            LogField.uint("duration_ms", 4),
+        },
+    };
+
+    var capture = Capture{ .allocator = std.testing.allocator };
+    defer capture.deinit();
+    var sink = ConsoleSink.init(.trace, .pretty);
+    sink.setEmitter(&capture, Capture.emit);
+    sink.write(&record);
+
+    try std.testing.expect(std.mem.indexOf(u8, capture.stdout.items, "request{trace_id=abc123 method=GET path=/health query=None}: Request completed") != null);
+    try std.testing.expect(std.mem.indexOf(u8, capture.stdout.items, "status=200") != null);
+    try std.testing.expect(std.mem.indexOf(u8, capture.stdout.items, "duration_ms=4") != null);
 }
