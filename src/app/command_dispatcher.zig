@@ -59,6 +59,16 @@ const AsyncCommandJobData = struct {
         var logger = core.logging.Logger.init(sink.asLogSink(), .silent);
         defer logger.deinit();
 
+        if (self.request.trace_id != null or self.request.request_id != null or self.request.span_id != null) {
+            logger.trace_context_provider = core.TraceScope.provider();
+            core.TraceScope.set(.{
+                .trace_id = self.request.trace_id,
+                .request_id = self.request.request_id,
+                .span_id = self.request.span_id,
+            });
+        }
+        defer core.TraceScope.clear();
+
         var ctx = CommandContext{
             .allocator = allocator,
             .request = self.request,
@@ -70,7 +80,18 @@ const AsyncCommandJobData = struct {
             .validated_params = self.validated_params,
         };
 
-        const result = try self.async_handler(&ctx);
+        const params_summary = summarizeParamsJson(allocator, self.validated_params) catch try allocator.dupe(u8, "{}");
+        defer allocator.free(params_summary);
+        const method_name = try std.fmt.allocPrint(allocator, "AsyncCommand.{s}", .{self.command_method});
+        defer allocator.free(method_name);
+        var method_trace = try observability.MethodTrace.begin(allocator, ctx.logger.logger, method_name, params_summary, 250);
+        defer method_trace.deinit();
+
+        const result = self.async_handler(&ctx) catch |err| {
+            method_trace.finishError(@errorName(err), null, true);
+            return err;
+        };
+        method_trace.finishSuccess(summarizeResultJson(result), true);
         return allocator.dupe(u8, result);
     }
 
