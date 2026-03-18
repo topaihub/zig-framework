@@ -81,8 +81,8 @@ Rust 侧真正值得借鉴的不是某个漂亮输出，而是三层分工：
 
 ```mermaid
 flowchart TD
-    A[普通业务日志] --> A1[logger.child(...).info/warn/error]
-    B[请求级日志] --> B1[request_trace.begin/complete]
+    A[普通业务日志] --> A1[普通 Logger 调用]
+    B[请求级日志] --> B1[RequestTrace]
     C[步骤级日志] --> C1[StepTrace]
     D[方法级调用链日志] --> D1[MethodTrace]
 ```

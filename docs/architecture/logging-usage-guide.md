@@ -40,13 +40,13 @@
 
 ```mermaid
 flowchart TD
-    A[请求进入 HTTP / bridge / CLI] --> B[request_trace.begin]
-    B --> C[CommandDispatcher / Adapter]
+    A[请求进入入口层] --> B[RequestTrace Begin]
+    B --> C[Dispatcher 或 Adapter]
     C --> D[MethodTrace 或 StepTrace]
-    D --> E[业务逻辑 / provider / config / node]
-    E --> F[request_trace.complete]
+    D --> E[业务逻辑与子系统]
+    E --> F[RequestTrace Complete]
 
-    G[普通业务状态] --> H[logger.child(...).info/warn/error]
+    G[普通业务状态] --> H[普通 Logger 调用]
 ```
 
 要点：
@@ -377,8 +377,8 @@ logger.info("gateway config updated", &. {
 ```mermaid
 sequenceDiagram
     participant Req as Request
-    participant Adapter as HTTP/Bridge/CLI Adapter
-    participant RT as request_trace
+    participant Adapter as Adapter
+    participant RT as RequestTrace
     participant Disp as Dispatcher
 
     Req->>Adapter: request
@@ -392,22 +392,22 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    A[request_trace.begin] --> B[MethodTrace.begin]
-    B --> C[业务步骤 StepTrace.begin]
+    A[RequestTrace Begin] --> B[MethodTrace Begin]
+    B --> C[StepTrace Begin]
     C --> D[业务逻辑]
-    D --> E[StepTrace.finish]
-    E --> F[MethodTrace.finish]
-    F --> G[request_trace.complete]
+    D --> E[StepTrace Finish]
+    E --> F[MethodTrace Finish]
+    F --> G[RequestTrace Complete]
 ```
 
 ### 模式 C：manager 读取 runtime 日志面
 
 ```mermaid
 flowchart LR
-    A[ourclaw runtime logs/events/status] --> B[runtime_client]
+    A[ourclaw 运行时状态面] --> B[runtime_client]
     B --> C[service]
     C --> D[view_model]
-    D --> E[manager UI/host]
+    D --> E[manager UI]
 ```
 
 ---
