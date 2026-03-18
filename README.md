@@ -38,7 +38,9 @@
 - 已经实际支撑 `ourclaw` 落下最小业务层：provider/channel/tool registry、ourclaw runtime app context、最小 CLI/bridge/HTTP adapter，以及 `app.meta` / `config.get` / `config.set` / `logs.recent` 命令
 - 已落地首批共享日志主干：`LogLevel`、`LogField`、`LogRecord`、`LogSink`、`MemorySink`、`Logger`
 - 已补齐 `ConsoleSink`、`JsonlFileSink`、`MultiSink`、`RedactMode` 与基础脱敏接线
+- 已补 `TraceTextFileSink`，当前既支持机器友好的 JSONL 文件日志，也支持调用链友好的文本 trace 文件日志
 - 已给 `Logger` 补 trace 上下文自动注入接口，后续 runtime 可直接挂接 `trace_id` / `span_id` / `request_id`
+- 已补 `SummaryTrace`，可输出 `ME / RT / BT / ET` 风格摘要日志，与 `MethodTrace` / `StepTrace` 形成互补
 - `app`、`config`、`runtime`、`observability` 已形成更完整的最小联通骨架，当前已经能够承载 `ourclaw` 的最小可运行业务层；后续重点转向真实 provider/channel/tool 业务能力、入口协议细化和 agent 运行链路
 
 ## 模块方向
@@ -54,5 +56,31 @@
 
 - `framework/docs/README.md`
 - `framework/docs/architecture/logging.md`
+- `framework/docs/architecture/logging-usage-guide.md`
 - `framework/docs/architecture/validation.md`
 - `framework/docs/architecture/runtime-pipeline.md`
+
+## 日志能力快速导航
+
+如果你要接日志 / trace，建议优先看下面这些入口：
+
+- 设计说明：`framework/docs/architecture/logging.md`
+- 使用规范：`framework/docs/architecture/logging-usage-guide.md`
+- 方法级链路示例：`framework/examples/logging_method_trace_demo.zig`
+- 摘要级链路示例：`framework/examples/logging_summary_trace_demo.zig`
+
+当前日志能力分层：
+
+- `request_trace`
+- `MethodTrace`
+- `StepTrace`
+- `SummaryTrace`
+- `TraceTextFileSink`
+- `JsonlFileSink`
+
+推荐理解方式：
+
+- `MethodTrace` 看完整调用链
+- `SummaryTrace` 看 `ME / RT / BT / ET` 摘要结果
+- `TraceTextFileSink` 适合本地调试和 grep
+- `JsonlFileSink` 适合机器采集和后处理

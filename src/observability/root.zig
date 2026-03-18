@@ -10,6 +10,7 @@ pub const trace_scope = @import("trace_scope.zig");
 pub const request_trace = @import("request_trace.zig");
 pub const step_trace = @import("step_trace.zig");
 pub const method_trace = @import("method_trace.zig");
+pub const summary_trace = @import("summary_trace.zig");
 
 pub const ObservedEvent = observer.ObservedEvent;
 pub const Observer = observer.Observer;
@@ -23,6 +24,8 @@ pub const TraceScope = trace_scope;
 pub const RequestTrace = request_trace.RequestTrace;
 pub const StepTrace = step_trace.StepTrace;
 pub const MethodTrace = method_trace.MethodTrace;
+pub const SummaryTrace = summary_trace.SummaryTrace;
+pub const ExceptionCategory = summary_trace.ExceptionCategory;
 
 pub const ModuleStage = enum {
     scaffold,

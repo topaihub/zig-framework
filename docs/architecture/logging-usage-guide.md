@@ -20,19 +20,21 @@
 
 ---
 
-## 2. 先记住三种日志能力
+## 2. 先记住四种日志能力
 
-当前 `framework` 里最重要的三类日志能力是：
+当前 `framework` 里最重要的四类日志能力是：
 
 1. **普通结构化日志**
 2. **请求级 trace 日志**
 3. **步骤级 / 方法级 trace 日志**
+4. **摘要级 trace 日志**
 
 如果只记一句话：
 
 - 普通日志：记录业务状态
 - request trace：记录请求生命周期
 - step/method trace：记录关键步骤和完整调用链
+- summary trace：记录适合 grep / 统计 / 慢调用筛选的摘要结果
 
 ---
 
@@ -54,6 +56,7 @@ flowchart TD
 - 请求入口优先包 `request_trace`
 - 关键步骤优先包 `StepTrace`
 - 完整调用链/方法入口优先包 `MethodTrace`
+- 摘要结果优先包 `SummaryTrace`
 - 普通状态信息走 `logger.child(...).info(...)`
 
 ---
@@ -186,6 +189,79 @@ method_trace.finishSuccess("Ok(200)", false);
 method_trace.finishError("UnauthorizedAccessException", "AUTH_FAILED", false);
 ```
 
+### 4.5 `SummaryTrace`
+
+适合：
+
+- 输出 `ME / RT / BT / ET` 风格的摘要日志
+- 对某个方法/动作给出一条适合 grep、统计和阈值筛选的总结
+- 与 `MethodTrace` 配合使用：前者看完整链路，后者看摘要结论
+
+示例：
+
+```zig
+var summary_trace = try framework.SummaryTrace.begin(
+    allocator,
+    ctx.logger.logger,
+    "Controller.Auth.Login",
+    500,
+);
+defer summary_trace.deinit();
+
+summary_trace.finishSuccess();
+```
+
+错误时：
+
+```zig
+summary_trace.finishError(.validation);
+summary_trace.finishError(.business);
+summary_trace.finishError(.auth);
+summary_trace.finishError(.system);
+```
+
+字段语义：
+
+- `ME`：Method
+- `RT`：Run Time，总执行时间，单位毫秒
+- `BT`：Beyond Threshold，是否超过阈值，`Y / N`
+- `ET`：Exception Type 分类码
+
+`ET` 当前约定：
+
+- `N`：无异常
+- `V`：验证异常
+- `B`：业务异常
+- `A`：认证/授权异常
+- `S`：系统异常
+
+典型输出：
+
+```text
+[08:23:02 INF] TraceId:xxxx|ME:OpenSpecZig.Status|RT:3|BT:N|ET:N
+```
+
+### 4.6 文件输出策略
+
+当前 `framework` 在文件日志上有两条路线：
+
+- `TraceTextFileSink`
+  - 适合本地调试、人工排查、grep 调用链
+  - 更适合看 `TraceId / ENTRY / EXIT / ME / RT / BT / ET`
+- `JsonlFileSink`
+  - 适合机器采集、日志平台接入、后处理分析
+  - 更适合结构化检索和外部日志系统
+
+推荐默认：
+
+- 面向开发者调试：优先 `TraceTextFileSink`
+- 面向机器消费：优先 `JsonlFileSink`
+
+参考示例：
+
+- `framework/examples/logging_method_trace_demo.zig`
+- `framework/examples/logging_summary_trace_demo.zig`
+
 ---
 
 ## 5. 在 `ourclaw` 里怎么用
@@ -227,6 +303,7 @@ method_trace.finishError("UnauthorizedAccessException", "AUTH_FAILED", false);
 
 - **入口/边界层**：适合 `MethodTrace`
 - **步骤/子动作层**：适合 `StepTrace`
+- **摘要/统计层**：适合 `SummaryTrace`
 
 ### 5.4 真实示例：配置运行时钩子
 
@@ -460,6 +537,20 @@ defer method_trace.deinit();
 method_trace.finishSuccess("Ok(200)", false);
 ```
 
+### 摘要级模板
+
+```zig
+var summary_trace = try framework.SummaryTrace.begin(
+    allocator,
+    ctx.logger.logger,
+    "Controller.Auth.Login",
+    500,
+);
+defer summary_trace.deinit();
+
+summary_trace.finishSuccess();
+```
+
 ### 步骤级模板
 
 ```zig
@@ -481,7 +572,7 @@ step_trace.finish(null);
 
 如果你只记住一句话，那就是：
 
-> **入口用 `request_trace`，关键方法用 `MethodTrace`，关键步骤用 `StepTrace`，普通状态变化用 `logger.child(...).info(...)`。**
+> **入口用 `request_trace`，关键方法用 `MethodTrace`，关键步骤用 `StepTrace`，摘要结果用 `SummaryTrace`，普通状态变化用 `logger.child(...).info(...)`。**
 
 按这个方式用，日志就会更容易：
 
