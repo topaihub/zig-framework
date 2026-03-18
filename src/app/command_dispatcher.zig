@@ -42,6 +42,30 @@ pub const CommandDispatchResult = union(enum) {
 
 pub const CommandEnvelope = contracts.envelope.Envelope(CommandDispatchResult);
 
+fn summarizeParamsJson(allocator: std.mem.Allocator, fields: []const ValidationField) anyerror![]const u8 {
+    var buf: std.ArrayListUnmanaged(u8) = .empty;
+    defer buf.deinit(allocator);
+    const writer = buf.writer(allocator);
+    try writer.writeByte('{');
+    for (fields, 0..) |field, index| {
+        if (index > 0) try writer.writeByte(',');
+        try writer.print("\"{s}\":", .{field.key});
+        switch (field.value) {
+            .string => |value| try writer.print("\"{s}\"", .{value}),
+            .integer => |value| try writer.print("{d}", .{value}),
+            .boolean => |value| try writer.writeAll(if (value) "true" else "false"),
+            else => try writer.writeAll("null"),
+        }
+    }
+    try writer.writeByte('}');
+    return allocator.dupe(u8, buf.items);
+}
+
+fn summarizeResultJson(result_json: []const u8) []const u8 {
+    if (result_json.len <= 96) return result_json;
+    return result_json[0..96];
+}
+
 const AsyncCommandJobData = struct {
     request: RequestContext,
     command_id: []u8,
@@ -59,15 +83,15 @@ const AsyncCommandJobData = struct {
         var logger = core.logging.Logger.init(sink.asLogSink(), .silent);
         defer logger.deinit();
 
-        if (self.request.trace_id != null or self.request.request_id != null or self.request.span_id != null) {
-            logger.trace_context_provider = core.TraceScope.provider();
-            core.TraceScope.set(.{
+        if (self.request.trace_id != null or self.request.span_id != null) {
+            logger.trace_context_provider = observability.TraceScope.provider();
+            observability.TraceScope.set(.{
                 .trace_id = self.request.trace_id,
                 .request_id = self.request.request_id,
                 .span_id = self.request.span_id,
             });
         }
-        defer core.TraceScope.clear();
+        defer observability.TraceScope.clear();
 
         var ctx = CommandContext{
             .allocator = allocator,
@@ -427,30 +451,6 @@ pub const CommandDispatcher = struct {
                 LogField.string("error_code", error_code),
             });
         }
-    }
-
-    fn summarizeParamsJson(allocator: std.mem.Allocator, fields: []const ValidationField) anyerror![]const u8 {
-        var buf: std.ArrayListUnmanaged(u8) = .empty;
-        defer buf.deinit(allocator);
-        const writer = buf.writer(allocator);
-        try writer.writeByte('{');
-        for (fields, 0..) |field, index| {
-            if (index > 0) try writer.writeByte(',');
-            try writer.print("\"{s}\":", .{field.key});
-            switch (field.value) {
-                .string => |value| try writer.print("\"{s}\"", .{value}),
-                .integer => |value| try writer.print("{d}", .{value}),
-                .boolean => |value| try writer.writeAll(if (value) "true" else "false"),
-                else => try writer.writeAll("null"),
-            }
-        }
-        try writer.writeByte('}');
-        return allocator.dupe(u8, buf.items);
-    }
-
-    fn summarizeResultJson(result_json: []const u8) []const u8 {
-        if (result_json.len <= 96) return result_json;
-        return result_json[0..96];
     }
 
     fn logInfo(self: *const Self, message: []const u8, request: CommandRequest, command: ?*const CommandDefinition, task_id: ?[]const u8) void {
