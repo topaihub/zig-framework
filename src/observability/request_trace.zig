@@ -65,10 +65,6 @@ const Completion = struct {
 fn logStarted(logger: *Logger, trace: *const RequestTrace) void {
     var fields_storage: [8]LogField = undefined;
     var count: usize = 0;
-    fields_storage[count] = LogField.string("trace_id", trace.trace_id);
-    count += 1;
-    fields_storage[count] = LogField.string("request_id", trace.request_id);
-    count += 1;
     fields_storage[count] = LogField.string("source", @tagName(trace.source));
     count += 1;
     fields_storage[count] = LogField.string("method", trace.method);
@@ -85,10 +81,6 @@ fn logStarted(logger: *Logger, trace: *const RequestTrace) void {
 fn logCompleted(logger: *Logger, trace: *const RequestTrace, status_code: ?u16, completion: Completion) void {
     var fields_storage: [10]LogField = undefined;
     var count: usize = 0;
-    fields_storage[count] = LogField.string("trace_id", trace.trace_id);
-    count += 1;
-    fields_storage[count] = LogField.string("request_id", trace.request_id);
-    count += 1;
     fields_storage[count] = LogField.string("source", @tagName(trace.source));
     count += 1;
     fields_storage[count] = LogField.string("method", trace.method);
