@@ -1,8 +1,8 @@
-# ourclaw 日志体系详细设计
+# framework 日志体系详细设计
 
 ## 1. 目标与范围
 
-本文档定义 `ourclaw` 的统一日志体系，目标是解决现有 `nullclaw` 中日志入口分散、结构不统一、文件日志能力不足、trace 无法稳定贯穿的问题，并吸收 `openclaw` 在结构化日志、子系统日志、日志容量治理上的成熟经验。
+本文档定义 `framework` 的统一日志体系，目标是为 `ourclaw` 与 `ourclaw-manager` 提供共享的日志底座能力，并吸收 `nullclaw`、`openclaw` 与 Rust `tracing` 风格实现中的有效设计思路。
 
 本文档覆盖：
 
