@@ -13,11 +13,9 @@ pub const runtime = @import("runtime/root.zig");
 pub const app = @import("app/root.zig");
 pub const effects = @import("effects/root.zig");
 pub const tooling = @import("tooling/root.zig");
-
-// vNext reserved module order:
-// pub const workflow = @import("workflow/root.zig");
-// pub const agentkit = @import("agentkit/root.zig");
-// pub const servicekit = @import("servicekit/root.zig");
+pub const workflow = @import("workflow/root.zig");
+pub const agentkit = @import("agentkit/root.zig");
+pub const servicekit = @import("servicekit/root.zig");
 
 pub const AppError = core.error_model.AppError;
 pub const Envelope = contracts.envelope.Envelope;
@@ -164,10 +162,27 @@ pub const ToolRegistry = tooling.ToolRegistry;
 pub const ToolRunRequest = tooling.ToolRunRequest;
 pub const ToolExecutionResult = tooling.ToolExecutionResult;
 pub const ToolRunner = tooling.ToolRunner;
+pub const ToolVTable = tooling.ToolVTable;
+pub const assertToolInterface = tooling.assertToolInterface;
+pub const defineTool = tooling.defineTool;
 pub const ScriptRequest = tooling.ScriptRequest;
 pub const ScriptResult = tooling.ScriptResult;
 pub const ScriptSpec = tooling.ScriptSpec;
 pub const ToolingRuntime = tooling.ToolingRuntime;
+pub const CommandSurface = tooling.CommandSurface;
+pub const RepoHealthCheckTool = tooling.RepoHealthCheckTool;
+pub const ScriptMarkdownFetchTool = tooling.ScriptMarkdownFetchTool;
+pub const ExampleServices = tooling.ExampleServices;
+pub const WorkflowDefinition = workflow.WorkflowDefinition;
+pub const WorkflowStep = workflow.WorkflowStep;
+pub const WorkflowStatus = workflow.WorkflowStatus;
+pub const WorkflowRunResult = workflow.WorkflowRunResult;
+pub const WorkflowRunner = workflow.WorkflowRunner;
+pub const ProviderDefinition = agentkit.ProviderDefinition;
+pub const ProviderHealth = agentkit.ProviderHealth;
+pub const ProviderHealthState = agentkit.ProviderHealthState;
+pub const ProviderModelInfo = agentkit.ProviderModelInfo;
+pub const AgentkitProviderRegistry = agentkit.ProviderRegistry;
 
 test {
     std.testing.refAllDecls(@This());
@@ -187,6 +202,9 @@ test "framework module scaffold exports are available" {
     try std.testing.expectEqualStrings("contracts", contracts.MODULE_NAME);
     try std.testing.expectEqualStrings("effects", effects.MODULE_NAME);
     try std.testing.expectEqualStrings("tooling", tooling.MODULE_NAME);
+    try std.testing.expectEqualStrings("workflow", workflow.MODULE_NAME);
+    try std.testing.expectEqualStrings("agentkit", agentkit.MODULE_NAME);
+    try std.testing.expectEqualStrings("servicekit", servicekit.MODULE_NAME);
     try std.testing.expectEqualStrings("CORE_INTERNAL_ERROR", core.error_model.code.CORE_INTERNAL_ERROR);
     try std.testing.expectEqualStrings("logging", core.logging.MODULE_NAME);
 }

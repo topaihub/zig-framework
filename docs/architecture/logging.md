@@ -4,6 +4,14 @@
 
 本文档定义 `framework` 的统一日志体系，目标是为 `ourclaw` 与 `ourclaw-manager` 提供共享的日志底座能力，并吸收 `nullclaw`、`openclaw` 与 Rust `tracing` 风格实现中的有效设计思路。
 
+配套阅读：
+
+- [`logging-tracing-design.md`](E:/vscode/fuckcode-dev/framework/docs/architecture/logging-tracing-design.md)
+- [`logging-reuse-evaluation.md`](E:/vscode/fuckcode-dev/framework/docs/architecture/logging-reuse-evaluation.md)
+- [`logging-optimization-requirements.md`](E:/vscode/fuckcode-dev/framework/docs/architecture/logging-optimization-requirements.md)
+- [`logging-optimization-design.md`](E:/vscode/fuckcode-dev/framework/docs/architecture/logging-optimization-design.md)
+- [`logging-optimization-tasks.md`](E:/vscode/fuckcode-dev/framework/docs/architecture/logging-optimization-tasks.md)
+
 本文档覆盖：
 
 - 日志数据模型

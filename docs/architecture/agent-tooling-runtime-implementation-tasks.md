@@ -76,66 +76,66 @@
 
 ## 8. 第一批垂直切片
 
-- [ ] 8.1 新增一个 Zig 原生示例工具，例如 `repo-health-check`
-- [ ] 8.2 让 `repo-health-check` 同时支持 direct tool 调用和 command surface 调用
-- [ ] 8.3 新增一个 script-backed 示例工具，例如 `script-markdown-fetch`
-- [ ] 8.4 让 `script-markdown-fetch` 通过统一脚本协议运行一个 Python 或 PowerShell 脚本
-- [ ] 8.5 为这两个垂直切片补齐 examples 文档，作为后续用户模板
+- [x] 8.1 新增一个 Zig 原生示例工具，例如 `repo-health-check`
+- [x] 8.2 让 `repo-health-check` 同时支持 direct tool 调用和 command surface 调用
+- [x] 8.3 新增一个 script-backed 示例工具，例如 `script-markdown-fetch`
+- [x] 8.4 让 `script-markdown-fetch` 通过统一脚本协议运行一个 Python 或 PowerShell 脚本
+- [x] 8.5 为这两个垂直切片补齐 examples 文档，作为后续用户模板
 
 ## 9. Workflow 基础层
 
-- [ ] 9.1 新建 `src/workflow/root.zig` 并在 `src/root.zig` 中导出 `workflow`
-- [ ] 9.2 实现 `src/workflow/definition.zig`，定义 workflow / step 基础模型
-- [ ] 9.3 实现 `src/workflow/step_types.zig`，先支持 `command`、`shell`、`retry`、`emit_event`
-- [ ] 9.4 实现 `src/workflow/runner.zig` 最小版，支持顺序执行和 retry
-- [ ] 9.5 实现 `src/workflow/state.zig`，记录运行态、step 指针、终态结果
-- [ ] 9.6 为 workflow runner 补齐测试，覆盖顺序执行、重试成功、重试失败
-- [ ] 9.7 将 workflow 执行接到现有 task runner / event bus / logger
+- [x] 9.1 新建 `src/workflow/root.zig` 并在 `src/root.zig` 中导出 `workflow`
+- [x] 9.2 实现 `src/workflow/definition.zig`，定义 workflow / step 基础模型
+- [x] 9.3 实现 `src/workflow/step_types.zig`，先支持 `command`、`shell`、`retry`、`emit_event`
+- [x] 9.4 实现 `src/workflow/runner.zig` 最小版，支持顺序执行和 retry
+- [x] 9.5 实现 `src/workflow/state.zig`，记录运行态、step 指针、终态结果
+- [x] 9.6 为 workflow runner 补齐测试，覆盖顺序执行、重试成功、重试失败
+- [x] 9.7 将 workflow 执行接到现有 task runner / event bus / logger
 - [ ] 9.8 暂不实现完整 DSL、checkpoint、resume、parallel fan-out，只保留结构预留
 
 ## 10. Service Bundle 与 Runtime Composition
 
-- [ ] 10.1 抽象出可复用的 service bundle / services facade 模式，吸收 `ourclaw` 的 `CommandServices` 思想
-- [ ] 10.2 为业务项目提供“如何把 services 挂到 framework.CommandContext.user_data”的标准模式
-- [ ] 10.3 设计一个小型组合层示例，证明业务项目不必把所有依赖都塞回 `framework.AppContext`
-- [ ] 10.4 补一份文档说明 kernel / tooling runtime / business services 三层关系
+- [x] 10.1 抽象出可复用的 service bundle / services facade 模式，吸收 `ourclaw` 的 `CommandServices` 思想
+- [x] 10.2 为业务项目提供“如何把 services 挂到 framework.CommandContext.user_data”的标准模式
+- [x] 10.3 设计一个小型组合层示例，证明业务项目不必把所有依赖都塞回 `framework.AppContext`
+- [x] 10.4 补一份文档说明 kernel / tooling runtime / business services 三层关系
 
 ## 11. Provider Substrate 预备层
 
-- [ ] 11.1 新建 `src/agentkit/` 或预留 `agentkit` 目录，仅放最小占位 root
-- [ ] 11.2 抽象 provider definition / provider health / provider model info 的共用契约
-- [ ] 11.3 吸收 `nullclaw` 的 `Kind` / `classify` / `Holder` / `fromConfig` 思路，先写成通用模式说明或基础类型
-- [ ] 11.4 先做 provider registry / catalog / health 的最小模型，不做完整 chat runtime
+- [x] 11.1 新建 `src/agentkit/` 或预留 `agentkit` 目录，仅放最小占位 root
+- [x] 11.2 抽象 provider definition / provider health / provider model info 的共用契约
+- [x] 11.3 吸收 `nullclaw` 的 `Kind` / `classify` / `Holder` / `fromConfig` 思路，先写成通用模式说明或基础类型
+- [x] 11.4 先做 provider registry / catalog / health 的最小模型，不做完整 chat runtime
 - [ ] 11.5 评估这层应该落在 `tooling`、`agentkit` 还是更晚阶段，形成边界说明
 
 ## 12. Channel / ServiceKit 预备层
 
-- [ ] 12.1 新建 `src/servicekit/` 或预留 `servicekit` 目录，仅放最小占位 root
-- [ ] 12.2 从 `ourclaw/runtime_host` 提炼最小 runtime host 抽象需求
-- [ ] 12.3 从 `nullclaw/channels/root.zig` 和 `channels/dispatch.zig` 提炼 channel 的 interface / registry / supervisor 模式说明
-- [ ] 12.4 明确 channel 当前阶段不进入 kernel 的约束文档
-- [ ] 12.5 为 future `servicekit` 留下 gateway / daemon / heartbeat / cron 组合边界
+- [x] 12.1 新建 `src/servicekit/` 或预留 `servicekit` 目录，仅放最小占位 root
+- [x] 12.2 从 `ourclaw/runtime_host` 提炼最小 runtime host 抽象需求
+- [x] 12.3 从 `nullclaw/channels/root.zig` 和 `channels/dispatch.zig` 提炼 channel 的 interface / registry / supervisor 模式说明
+- [x] 12.4 明确 channel 当前阶段不进入 kernel 的约束文档
+- [x] 12.5 为 future `servicekit` 留下 gateway / daemon / heartbeat / cron 组合边界
 
 ## 13. 与 zig-opencode / ourclaw 的消费验证
 
-- [ ] 13.1 为 `zig-opencode` 写一份消费计划，说明未来如何使用 `framework/tooling`
-- [ ] 13.2 为 `ourclaw` 写一份消费计划，说明未来如何使用 `framework/tooling`、`workflow`、`service bundle`
-- [ ] 13.3 从两个项目里各挑一个最小真实场景，验证 `framework` 新 substrate 是否真的可复用
-- [ ] 13.4 记录那些“看似通用但其实仍应留在 app 层”的能力，避免错误下沉
+- [x] 13.1 为 `zig-opencode` 写一份消费计划，说明未来如何使用 `framework/tooling`
+- [x] 13.2 为 `ourclaw` 写一份消费计划，说明未来如何使用 `framework/tooling`、`workflow`、`service bundle`
+- [x] 13.3 从两个项目里各挑一个最小真实场景，验证 `framework` 新 substrate 是否真的可复用
+- [x] 13.4 记录那些“看似通用但其实仍应留在 app 层”的能力，避免错误下沉
 
 ## 14. 文档与规范收尾
 
-- [ ] 14.1 新增一份 `framework` vNext 的 implementation guide，说明新增模块之间的依赖规则
-- [ ] 14.2 为新增 `effects` / `tooling` / `workflow` 模块补齐 architecture 文档
-- [ ] 14.3 为外部脚本托管协议补一份单独文档，给 future skill backend 使用
-- [ ] 14.4 对 README 和 architecture index 做最终整理，给后续大模型一个稳定阅读入口
+- [x] 14.1 新增一份 `framework` vNext 的 implementation guide，说明新增模块之间的依赖规则
+- [x] 14.2 为新增 `effects` / `tooling` / `workflow` 模块补齐 architecture 文档
+- [x] 14.3 为外部脚本托管协议补一份单独文档，给 future skill backend 使用
+- [x] 14.4 对 README 和 architecture index 做最终整理，给后续大模型一个稳定阅读入口
 
 ## 15. 第一阶段完成判定
 
-- [ ] 15.1 `effects` 最小层存在并可被真实代码消费
-- [ ] 15.2 Zig 原生 tool 能通过统一 runner 执行
-- [ ] 15.3 外部脚本能通过统一 script host 托管
-- [ ] 15.4 command surface 已打通
-- [ ] 15.5 至少两个垂直切片可运行
-- [ ] 15.6 tests 覆盖成功、失败、timeout、invalid output 等关键路径
-- [ ] 15.7 文档、requirements、design、tasks 保持同步
+- [x] 15.1 `effects` 最小层存在并可被真实代码消费
+- [x] 15.2 Zig 原生 tool 能通过统一 runner 执行
+- [x] 15.3 外部脚本能通过统一 script host 托管
+- [x] 15.4 command surface 已打通
+- [x] 15.5 至少两个垂直切片可运行
+- [x] 15.6 tests 覆盖成功、失败、timeout、invalid output 等关键路径
+- [x] 15.7 文档、requirements、design、tasks 保持同步

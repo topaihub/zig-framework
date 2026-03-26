@@ -133,15 +133,18 @@ fn buildArgv(allocator: std.mem.Allocator, program: []const u8, args: []const []
     const items = try allocator.alloc([]const u8, args.len + 1);
     errdefer allocator.free(items);
 
-    items[0] = try allocator.dupe(u8, program);
-    var i: usize = 0;
+    var initialized: usize = 0;
     errdefer {
-        while (i <= args.len) : (i += 1) allocator.free(items[i]);
+        var i: usize = 0;
+        while (i < initialized) : (i += 1) allocator.free(items[i]);
     }
+
+    items[0] = try allocator.dupe(u8, program);
+    initialized = 1;
 
     for (args, 0..) |arg, index| {
         items[index + 1] = try allocator.dupe(u8, arg);
-        i = index + 1;
+        initialized = index + 2;
     }
     return items;
 }
