@@ -8,3 +8,4 @@ tmp.zig
 .zig-cache/
 zig-out/
 .DS_Store
+.zig-cache-global
