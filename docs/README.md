@@ -17,6 +17,9 @@
 - `framework/docs/architecture/logging-usage-guide.md`
 - `framework/docs/architecture/validation.md`
 - `framework/docs/architecture/runtime-pipeline.md`
+- `framework/docs/architecture/agent-tooling-runtime-direction.md`
+- `framework/docs/architecture/agent-tooling-runtime-vnext-module-design.md`
+- `framework/docs/architecture/agent-tooling-runtime-phase1-roadmap.md`
 - `framework/docs/development/win11-dev-workstation.md`
 - `framework/docs/development/win11-scoop-zig-env.md`
 - `framework/docs/development/vscode-zed-zls-setup.md`
