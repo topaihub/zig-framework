@@ -71,6 +71,7 @@ pub const MemorySink = struct {
     records: std.ArrayListUnmanaged(StoredLogRecord) = .empty,
     dropped_records: usize = 0,
     flush_count: usize = 0,
+    mutex: std.Thread.Mutex = .{},
 
     const Self = @This();
 
@@ -89,6 +90,8 @@ pub const MemorySink = struct {
     }
 
     pub fn deinit(self: *Self) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
         for (self.records.items) |*record| {
             record.deinit(self.allocator);
         }
@@ -103,20 +106,30 @@ pub const MemorySink = struct {
     }
 
     pub fn write(self: *Self, record: *const LogRecord) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
         self.appendOwnedRecord(record) catch {
             self.dropped_records += 1;
         };
     }
 
     pub fn flush(self: *Self) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
         self.flush_count += 1;
     }
 
     pub fn count(self: *const Self) usize {
+        const mutable_self: *Self = @constCast(@ptrCast(self));
+        mutable_self.mutex.lock();
+        defer mutable_self.mutex.unlock();
         return self.records.items.len;
     }
 
     pub fn latest(self: *const Self) ?*const StoredLogRecord {
+        const mutable_self: *Self = @constCast(@ptrCast(self));
+        mutable_self.mutex.lock();
+        defer mutable_self.mutex.unlock();
         if (self.records.items.len == 0) {
             return null;
         }
@@ -124,6 +137,9 @@ pub const MemorySink = struct {
     }
 
     pub fn recordAt(self: *const Self, index: usize) ?*const StoredLogRecord {
+        const mutable_self: *Self = @constCast(@ptrCast(self));
+        mutable_self.mutex.lock();
+        defer mutable_self.mutex.unlock();
         if (index >= self.records.items.len) {
             return null;
         }
@@ -240,4 +256,35 @@ test "memory sink clones fields and supports erased interface" {
     try std.testing.expectEqual(@as(usize, 1), sink.flush_count);
     try std.testing.expectEqualStrings("config", sink.latest().?.subsystem);
     try std.testing.expectEqualStrings("gateway.port", sink.latest().?.fields[0].value.string);
+}
+
+test "memory sink supports concurrent writes without corrupting storage" {
+    const Writer = struct {
+        fn run(sink: *MemorySink, index: usize) !void {
+            var i: usize = 0;
+            while (i < 200) : (i += 1) {
+                const record = LogRecord{
+                    .ts_unix_ms = @intCast(index * 1000 + i),
+                    .level = .info,
+                    .subsystem = "concurrency",
+                    .message = "write",
+                };
+                sink.write(&record);
+            }
+        }
+    };
+
+    var sink = MemorySink.init(std.testing.allocator, 2048);
+    defer sink.deinit();
+
+    const threads = [_]std.Thread{
+        try std.Thread.spawn(.{}, Writer.run, .{ &sink, 0 }),
+        try std.Thread.spawn(.{}, Writer.run, .{ &sink, 1 }),
+        try std.Thread.spawn(.{}, Writer.run, .{ &sink, 2 }),
+        try std.Thread.spawn(.{}, Writer.run, .{ &sink, 3 }),
+    };
+    for (threads) |thread| thread.join();
+
+    try std.testing.expectEqual(@as(usize, 800), sink.count());
+    try std.testing.expect(sink.latest() != null);
 }

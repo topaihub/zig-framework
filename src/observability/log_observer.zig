@@ -12,6 +12,7 @@ pub const LogObserver = struct {
     subsystem_len: usize = 0,
     record_count: usize = 0,
     flush_count: usize = 0,
+    mutex: std.Thread.Mutex = .{},
 
     const Self = @This();
 
@@ -34,7 +35,9 @@ pub const LogObserver = struct {
     }
 
     pub fn record(self: *Self, topic: []const u8, payload_json: []const u8) anyerror!void {
+        self.mutex.lock();
         self.record_count += 1;
+        self.mutex.unlock();
         self.logger.child(self.subsystem()).info("observer event", &.{
             LogField.string("topic", topic),
             LogField.string("payload_json", payload_json),
@@ -42,7 +45,9 @@ pub const LogObserver = struct {
     }
 
     pub fn flush(self: *Self) anyerror!void {
+        self.mutex.lock();
         self.flush_count += 1;
+        self.mutex.unlock();
         self.logger.flush();
     }
 
