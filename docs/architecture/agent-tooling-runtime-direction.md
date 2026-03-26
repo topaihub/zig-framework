@@ -7,8 +7,12 @@
 
 配套阅读：
 
+- [`agent-tooling-runtime-requirements.md`](E:/vscode/fuckcode-dev/framework/docs/architecture/agent-tooling-runtime-requirements.md)
+- [`agent-tooling-runtime-implementation-tasks.md`](E:/vscode/fuckcode-dev/framework/docs/architecture/agent-tooling-runtime-implementation-tasks.md)
 - [`agent-tooling-runtime-vnext-module-design.md`](E:/vscode/fuckcode-dev/framework/docs/architecture/agent-tooling-runtime-vnext-module-design.md)
 - [`agent-tooling-runtime-phase1-roadmap.md`](E:/vscode/fuckcode-dev/framework/docs/architecture/agent-tooling-runtime-phase1-roadmap.md)
+- [`framework-positioning-for-zig-opencode-and-ourclaw.md`](E:/vscode/fuckcode-dev/framework/docs/architecture/framework-positioning-for-zig-opencode-and-ourclaw.md)
+- [`nullclaw-and-ourclaw-extraction-strategy.md`](E:/vscode/fuckcode-dev/framework/docs/architecture/nullclaw-and-ourclaw-extraction-strategy.md)
 
 本文档关注的问题是：
 

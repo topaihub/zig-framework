@@ -6,11 +6,18 @@ pub const PACKAGE_NAME = "framework";
 pub const PACKAGE_VERSION = "0.1.0";
 
 pub const core = @import("core/root.zig");
+pub const contracts = @import("contracts/root.zig");
 pub const config = @import("config/root.zig");
 pub const observability = @import("observability/root.zig");
 pub const runtime = @import("runtime/root.zig");
 pub const app = @import("app/root.zig");
-pub const contracts = @import("contracts/root.zig");
+pub const effects = @import("effects/root.zig");
+pub const tooling = @import("tooling/root.zig");
+
+// vNext reserved module order:
+// pub const workflow = @import("workflow/root.zig");
+// pub const agentkit = @import("agentkit/root.zig");
+// pub const servicekit = @import("servicekit/root.zig");
 
 pub const AppError = core.error_model.AppError;
 pub const Envelope = contracts.envelope.Envelope;
@@ -121,6 +128,46 @@ pub const ConfigLoader = config.ConfigLoader;
 pub const ConfigValueSource = config.ConfigValueSource;
 pub const LoadedConfigValue = config.LoadedConfigValue;
 pub const ConfigValueParser = config.ConfigValueParser;
+pub const EffectRequestContext = effects.EffectRequestContext;
+pub const EffectStatus = effects.EffectStatus;
+pub const EffectResultContext = effects.EffectResultContext;
+pub const EffectErrorCategory = effects.EffectErrorCategory;
+pub const EffectErrorInfo = effects.EffectErrorInfo;
+pub const ProcessEnvVar = effects.ProcessEnvVar;
+pub const ProcessRunRequest = effects.ProcessRunRequest;
+pub const ProcessTerminationKind = effects.ProcessTerminationKind;
+pub const ProcessRunResult = effects.ProcessRunResult;
+pub const ProcessRunner = effects.ProcessRunner;
+pub const NativeProcessRunner = effects.NativeProcessRunner;
+pub const FsEntryKind = effects.FsEntryKind;
+pub const FsEntry = effects.FsEntry;
+pub const FileSystem = effects.FileSystem;
+pub const NativeFileSystem = effects.NativeFileSystem;
+pub const EnvProvider = effects.EnvProvider;
+pub const NativeEnvProvider = effects.NativeEnvProvider;
+pub const Clock = effects.Clock;
+pub const NativeClock = effects.NativeClock;
+pub const deadlineAfterMs = effects.clock.deadlineAfterMs;
+pub const deadlineExceeded = effects.clock.deadlineExceeded;
+pub const HttpMethod = effects.HttpMethod;
+pub const HttpHeader = effects.HttpHeader;
+pub const HttpRequest = effects.HttpRequest;
+pub const HttpResponse = effects.HttpResponse;
+pub const HttpClient = effects.HttpClient;
+pub const NativeHttpClient = effects.NativeHttpClient;
+pub const EffectsRuntime = effects.EffectsRuntime;
+pub const ToolExecutionKind = tooling.ToolExecutionKind;
+pub const NativeToolHandler = tooling.NativeToolHandler;
+pub const ToolDefinition = tooling.ToolDefinition;
+pub const ToolContext = tooling.ToolContext;
+pub const ToolRegistry = tooling.ToolRegistry;
+pub const ToolRunRequest = tooling.ToolRunRequest;
+pub const ToolExecutionResult = tooling.ToolExecutionResult;
+pub const ToolRunner = tooling.ToolRunner;
+pub const ScriptRequest = tooling.ScriptRequest;
+pub const ScriptResult = tooling.ScriptResult;
+pub const ScriptSpec = tooling.ScriptSpec;
+pub const ToolingRuntime = tooling.ToolingRuntime;
 
 test {
     std.testing.refAllDecls(@This());
@@ -138,6 +185,8 @@ test "framework module scaffold exports are available" {
     try std.testing.expectEqualStrings("runtime", runtime.MODULE_NAME);
     try std.testing.expectEqualStrings("app", app.MODULE_NAME);
     try std.testing.expectEqualStrings("contracts", contracts.MODULE_NAME);
+    try std.testing.expectEqualStrings("effects", effects.MODULE_NAME);
+    try std.testing.expectEqualStrings("tooling", tooling.MODULE_NAME);
     try std.testing.expectEqualStrings("CORE_INTERNAL_ERROR", core.error_model.code.CORE_INTERNAL_ERROR);
     try std.testing.expectEqualStrings("logging", core.logging.MODULE_NAME);
 }

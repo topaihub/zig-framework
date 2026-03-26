@@ -17,9 +17,13 @@
 - `framework/docs/architecture/logging-usage-guide.md`
 - `framework/docs/architecture/validation.md`
 - `framework/docs/architecture/runtime-pipeline.md`
+- `framework/docs/architecture/agent-tooling-runtime-requirements.md`
+- `framework/docs/architecture/agent-tooling-runtime-implementation-tasks.md`
 - `framework/docs/architecture/agent-tooling-runtime-direction.md`
 - `framework/docs/architecture/agent-tooling-runtime-vnext-module-design.md`
 - `framework/docs/architecture/agent-tooling-runtime-phase1-roadmap.md`
+- `framework/docs/architecture/framework-positioning-for-zig-opencode-and-ourclaw.md`
+- `framework/docs/architecture/nullclaw-and-ourclaw-extraction-strategy.md`
 - `framework/docs/development/win11-dev-workstation.md`
 - `framework/docs/development/win11-scoop-zig-env.md`
 - `framework/docs/development/vscode-zed-zls-setup.md`
@@ -43,5 +47,15 @@
 
 ## 默认阅读方式
 
-如果你想知道“框架到底提供了什么能力”，先读这里；
+如果你想知道“框架到底提供了什么能力”，建议按下面顺序读：
+
+1. `framework/docs/architecture/agent-tooling-runtime-requirements.md`
+2. `framework/docs/architecture/agent-tooling-runtime-executable-tasks.md`
+3. `framework/docs/architecture/agent-tooling-runtime-direction.md`
+4. `framework/docs/architecture/agent-tooling-runtime-vnext-module-design.md`
+5. `framework/docs/architecture/agent-tooling-runtime-phase1-roadmap.md`
+6. `framework/docs/architecture/framework-positioning-for-zig-opencode-and-ourclaw.md`
+7. `framework/docs/architecture/nullclaw-and-ourclaw-extraction-strategy.md`
+8. `framework/docs/architecture/implementation-guardrails.md`
+
 如果你想知道“ourclaw 怎样使用这些能力”，再读 `ourclaw/docs/architecture/`。
