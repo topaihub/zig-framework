@@ -115,6 +115,7 @@ const AsyncCommandJobData = struct {
             method_trace.finishError(@errorName(err), null, true);
             return err;
         };
+        defer allocator.free(result);
         method_trace.finishSuccess(summarizeResultJson(result), true);
         return allocator.dupe(u8, result);
     }
@@ -747,8 +748,8 @@ test "command dispatcher enforces authority checks" {
 
 test "command dispatcher accepts async task commands via task runner" {
     const AsyncHandler = struct {
-        fn call(_: *const CommandContext) anyerror![]const u8 {
-            return "{\"status\":\"ok\"}";
+        fn call(ctx: *const CommandContext) anyerror![]const u8 {
+            return ctx.allocator.dupe(u8, "{\"status\":\"ok\"}");
         }
     };
 
