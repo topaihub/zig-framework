@@ -243,97 +243,97 @@
 
 ## 18. 阶段 16：垂直切片 A - Zig 原生工具
 
-- [ ] 18.1 在 `framework/examples/` 设计一个 `repo-health-check` 示例
-- [ ] 18.2 为该示例定义 input schema
-- [ ] 18.3 用 `ToolVTable` helper 实现其 native tool
-- [ ] 18.4 让它通过 `ToolRegistry` 注册
-- [ ] 18.5 让它通过 command surface 暴露成 command
-- [ ] 18.6 为其添加 example 文档
-- [ ] 18.7 为其添加集成测试
+- [x] 18.1 在 `framework/examples/` 设计一个 `repo-health-check` 示例
+- [x] 18.2 为该示例定义 input schema
+- [x] 18.3 用 `ToolVTable` helper 实现其 native tool
+- [x] 18.4 让它通过 `ToolRegistry` 注册
+- [x] 18.5 让它通过 command surface 暴露成 command
+- [x] 18.6 为其添加 example 文档
+- [x] 18.7 为其添加集成测试
 
 ## 19. 阶段 17：垂直切片 B - Script-backed 工具
 
-- [ ] 19.1 选择一个最小外部脚本场景，例如 `script-markdown-fetch`
-- [ ] 19.2 为该场景定义 `ScriptSpec`
-- [ ] 19.3 将 Python 或 PowerShell 示例脚本接入统一 script contract
-- [ ] 19.4 将其注册成 script-backed tool
-- [ ] 19.5 让它通过 command surface 暴露
+- [x] 19.1 选择一个最小外部脚本场景，例如 `script-markdown-fetch`
+- [x] 19.2 为该场景定义 `ScriptSpec`
+- [x] 19.3 将 Python 或 PowerShell 示例脚本接入统一 script contract
+- [x] 19.4 将其注册成 script-backed tool
+- [x] 19.5 让它通过 command surface 暴露
 - [ ] 19.6 为其添加 example 文档
 - [ ] 19.7 为其添加集成测试
 
 ## 20. 阶段 18：Workflow 模块骨架
 
-- [ ] 20.1 新建 `framework/src/workflow/root.zig`
-- [ ] 20.2 在 `workflow/root.zig` 中定义 `MODULE_NAME = "workflow"`
-- [ ] 20.3 新建 `framework/src/workflow/definition.zig`
-- [ ] 20.4 新建 `framework/src/workflow/step_types.zig`
-- [ ] 20.5 新建 `framework/src/workflow/runner.zig`
-- [ ] 20.6 新建 `framework/src/workflow/state.zig`
-- [ ] 20.7 在 `framework/src/root.zig` 中导出 `workflow`
-- [ ] 20.8 增加 workflow 模块 smoke test
+- [x] 20.1 新建 `framework/src/workflow/root.zig`
+- [x] 20.2 在 `workflow/root.zig` 中定义 `MODULE_NAME = "workflow"`
+- [x] 20.3 新建 `framework/src/workflow/definition.zig`
+- [x] 20.4 新建 `framework/src/workflow/step_types.zig`
+- [x] 20.5 新建 `framework/src/workflow/runner.zig`
+- [x] 20.6 新建 `framework/src/workflow/state.zig`
+- [x] 20.7 在 `framework/src/root.zig` 中导出 `workflow`
+- [x] 20.8 增加 workflow 模块 smoke test
 
 ## 21. 阶段 19：Workflow 最小执行能力
 
-- [ ] 21.1 在 `step_types.zig` 中定义 `command` step
-- [ ] 21.2 在 `step_types.zig` 中定义 `shell` step
-- [ ] 21.3 在 `step_types.zig` 中定义 `retry` step
-- [ ] 21.4 在 `step_types.zig` 中定义 `emit_event` step
-- [ ] 21.5 在 `runner.zig` 中实现顺序执行
-- [ ] 21.6 在 `runner.zig` 中实现 retry
-- [ ] 21.7 在 `runner.zig` 中接入 logger / event bus / task runner
-- [ ] 21.8 增加“顺序执行成功”测试
-- [ ] 21.9 增加“retry 成功”测试
-- [ ] 21.10 增加“retry 最终失败”测试
+- [x] 21.1 在 `step_types.zig` 中定义 `command` step
+- [x] 21.2 在 `step_types.zig` 中定义 `shell` step
+- [x] 21.3 在 `step_types.zig` 中定义 `retry` step
+- [x] 21.4 在 `step_types.zig` 中定义 `emit_event` step
+- [x] 21.5 在 `runner.zig` 中实现顺序执行
+- [x] 21.6 在 `runner.zig` 中实现 retry
+- [x] 21.7 在 `runner.zig` 中接入 logger / event bus / task runner
+- [x] 21.8 增加“顺序执行成功”测试
+- [x] 21.9 增加“retry 成功”测试
+- [x] 21.10 增加“retry 最终失败”测试
 
 ## 22. 阶段 20：Service Bundle / Services Facade
 
-- [ ] 22.1 新建 `framework/docs/architecture/business-services-pattern.md`
-- [ ] 22.2 从 `ourclaw` 的 `CommandServices` 提炼一个通用 service bundle 模式
-- [ ] 22.3 设计一个小型 `ExampleServices`，说明如何挂到 `CommandContext.user_data`
-- [ ] 22.4 增加 service bundle 示例测试
+- [x] 22.1 新建 `framework/docs/architecture/business-services-pattern.md`
+- [x] 22.2 从 `ourclaw` 的 `CommandServices` 提炼一个通用 service bundle 模式
+- [x] 22.3 设计一个小型 `ExampleServices`，说明如何挂到 `CommandContext.user_data`
+- [x] 22.4 增加 service bundle 示例测试
 - [ ] 22.5 明确 `framework.AppContext` 与业务 services facade 的边界
 
 ## 23. 阶段 21：Provider Substrate 预备层
 
-- [ ] 23.1 新建 `framework/src/agentkit/root.zig` 占位
-- [ ] 23.2 定义 `ProviderDefinition` 最小契约
-- [ ] 23.3 定义 `ProviderHealth` 最小契约
-- [ ] 23.4 定义 `ProviderModelInfo` 最小契约
-- [ ] 23.5 设计 provider registry 最小模型
-- [ ] 23.6 记录 `Kind / classify / Holder / fromConfig` 通用模式到文档
+- [x] 23.1 新建 `framework/src/agentkit/root.zig` 占位
+- [x] 23.2 定义 `ProviderDefinition` 最小契约
+- [x] 23.3 定义 `ProviderHealth` 最小契约
+- [x] 23.4 定义 `ProviderModelInfo` 最小契约
+- [x] 23.5 设计 provider registry 最小模型
+- [x] 23.6 记录 `Kind / classify / Holder / fromConfig` 通用模式到文档
 - [ ] 23.7 明确当前阶段不实现完整 provider chat runtime
 
 ## 24. 阶段 22：Channel / ServiceKit 预备层
 
-- [ ] 24.1 新建 `framework/src/servicekit/root.zig` 占位
-- [ ] 24.2 从 `ourclaw/runtime_host` 提炼 runtime host 抽象需求
-- [ ] 24.3 从 `nullclaw/channels/root.zig` 提炼 channel interface 模式说明
-- [ ] 24.4 从 `nullclaw/channels/dispatch.zig` 提炼 supervisor / dispatch loop 模式说明
-- [ ] 24.5 形成 channel 当前阶段“不进入 kernel”的约束说明
+- [x] 24.1 新建 `framework/src/servicekit/root.zig` 占位
+- [x] 24.2 从 `ourclaw/runtime_host` 提炼 runtime host 抽象需求
+- [x] 24.3 从 `nullclaw/channels/root.zig` 提炼 channel interface 模式说明
+- [x] 24.4 从 `nullclaw/channels/dispatch.zig` 提炼 supervisor / dispatch loop 模式说明
+- [x] 24.5 形成 channel 当前阶段“不进入 kernel”的约束说明
 
 ## 25. 阶段 23：消费方验证
 
-- [ ] 25.1 为 `zig-opencode` 编写一份 `framework/tooling` 消费方案
-- [ ] 25.2 为 `ourclaw` 编写一份 `framework/tooling` / `workflow` 消费方案
-- [ ] 25.3 在 `zig-opencode` 中选一个 future tool 场景做消费验证草案
-- [ ] 25.4 在 `ourclaw` 中选一个 future script/tool 场景做消费验证草案
-- [ ] 25.5 记录那些不应下沉到 framework 的能力，避免误抽象
+- [x] 25.1 为 `zig-opencode` 编写一份 `framework/tooling` 消费方案
+- [x] 25.2 为 `ourclaw` 编写一份 `framework/tooling` / `workflow` 消费方案
+- [x] 25.3 在 `zig-opencode` 中选一个 future tool 场景做消费验证草案
+- [x] 25.4 在 `ourclaw` 中选一个 future script/tool 场景做消费验证草案
+- [x] 25.5 记录那些不应下沉到 framework 的能力，避免误抽象
 
 ## 26. 阶段 24：文档与规范收尾
 
-- [ ] 26.1 新增 `effects` 模块设计文档
-- [ ] 26.2 新增 `tooling` 模块设计文档
-- [ ] 26.3 新增 `script contract` 文档
-- [ ] 26.4 新增 `workflow` 最小版设计文档
-- [ ] 26.5 更新 docs index 与建议阅读顺序
+- [x] 26.1 新增 `effects` 模块设计文档
+- [x] 26.2 新增 `tooling` 模块设计文档
+- [x] 26.3 新增 `script contract` 文档
+- [x] 26.4 新增 `workflow` 最小版设计文档
+- [x] 26.5 更新 docs index 与建议阅读顺序
 
 ## 27. 第一阶段完成判定
 
-- [ ] 27.1 `effects` 模块已存在并有最小测试覆盖
-- [ ] 27.2 native Zig tool 已可注册和执行
-- [ ] 27.3 script-backed tool 已可托管和执行
-- [ ] 27.4 command surface 已打通
-- [ ] 27.5 至少 2 个垂直切片可运行
-- [ ] 27.6 workflow 最小 runner 可运行
-- [ ] 27.7 service bundle pattern 已沉淀为示例与文档
-- [ ] 27.8 requirement / design / roadmap / tasks / docs index 已同步
+- [x] 27.1 `effects` 模块已存在并有最小测试覆盖
+- [x] 27.2 native Zig tool 已可注册和执行
+- [x] 27.3 script-backed tool 已可托管和执行
+- [x] 27.4 command surface 已打通
+- [x] 27.5 至少 2 个垂直切片可运行
+- [x] 27.6 workflow 最小 runner 可运行
+- [x] 27.7 service bundle pattern 已沉淀为示例与文档
+- [x] 27.8 requirement / design / roadmap / tasks / docs index 已同步

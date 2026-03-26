@@ -14,6 +14,10 @@
 
 - `framework/docs/architecture/logging.md`
 - `framework/docs/architecture/logging-tracing-design.md`
+- `framework/docs/architecture/logging-reuse-evaluation.md`
+- `framework/docs/architecture/logging-optimization-requirements.md`
+- `framework/docs/architecture/logging-optimization-design.md`
+- `framework/docs/architecture/logging-optimization-tasks.md`
 - `framework/docs/architecture/logging-usage-guide.md`
 - `framework/docs/architecture/validation.md`
 - `framework/docs/architecture/runtime-pipeline.md`
@@ -57,5 +61,10 @@
 6. `framework/docs/architecture/framework-positioning-for-zig-opencode-and-ourclaw.md`
 7. `framework/docs/architecture/nullclaw-and-ourclaw-extraction-strategy.md`
 8. `framework/docs/architecture/implementation-guardrails.md`
+9. `framework/docs/architecture/implementation-guide.md`
+10. `framework/docs/architecture/effects.md`
+11. `framework/docs/architecture/tooling.md`
+12. `framework/docs/architecture/workflow.md`
+13. `framework/docs/architecture/script-contract.md`
 
 如果你想知道“ourclaw 怎样使用这些能力”，再读 `ourclaw/docs/architecture/`。

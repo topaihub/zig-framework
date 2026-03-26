@@ -10,6 +10,7 @@ pub const script_contract = @import("script_contract.zig");
 pub const script_host = @import("script_host.zig");
 pub const runtime = @import("runtime.zig");
 pub const adapters = @import("adapters/root.zig");
+pub const examples = @import("examples/root.zig");
 
 pub const ToolExecutionKind = tool_definition.ToolExecutionKind;
 pub const NativeToolHandler = tool_definition.NativeToolHandler;
@@ -27,6 +28,9 @@ pub const ScriptResult = script_contract.ScriptResult;
 pub const ScriptSpec = script_contract.ScriptSpec;
 pub const ToolingRuntime = runtime.ToolingRuntime;
 pub const CommandSurface = adapters.command_surface.CommandSurface;
+pub const RepoHealthCheckTool = examples.RepoHealthCheckTool;
+pub const ScriptMarkdownFetchTool = examples.ScriptMarkdownFetchTool;
+pub const ExampleServices = examples.ExampleServices;
 
 pub const ModuleStage = enum {
     scaffold,
