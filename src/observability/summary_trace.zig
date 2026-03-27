@@ -69,11 +69,11 @@ pub const SummaryTrace = struct {
 
         const summary_logger = self.logger.child("summary");
         if (category == .system) {
-            summary_logger.@"error"("TRACE_SUMMARY", fields[0..]);
+            summary_logger.logKind(.@"error", core.logging.LogRecordKind.summary, "TRACE_SUMMARY", fields[0..]);
         } else if (category != .none or beyond_threshold) {
-            summary_logger.warn("TRACE_SUMMARY", fields[0..]);
+            summary_logger.logKind(.warn, core.logging.LogRecordKind.summary, "TRACE_SUMMARY", fields[0..]);
         } else {
-            summary_logger.info("TRACE_SUMMARY", fields[0..]);
+            summary_logger.logKind(.info, core.logging.LogRecordKind.summary, "TRACE_SUMMARY", fields[0..]);
         }
     }
 
@@ -93,6 +93,7 @@ test "summary trace emits ME/RT/BT/ET data" {
     trace.finishSuccess();
 
     const record = memory_sink.latest().?;
+    try std.testing.expectEqual(core.logging.LogRecordKind.summary, record.kind);
     try std.testing.expectEqualStrings("summary", record.subsystem);
     try std.testing.expectEqualStrings("TRACE_SUMMARY", record.message);
     try std.testing.expectEqualStrings("Auth.Login", record.fields[0].value.string);

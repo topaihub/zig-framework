@@ -75,7 +75,7 @@ fn logStarted(logger: *Logger, trace: *const RequestTrace) void {
         fields_storage[count] = LogField.string("query", query);
         count += 1;
     }
-    logger.child("request").info("Request started", fields_storage[0..count]);
+    logger.child("request").logKind(.info, core.logging.LogRecordKind.request, "Request started", fields_storage[0..count]);
 }
 
 fn logCompleted(logger: *Logger, trace: *const RequestTrace, status_code: ?u16, completion: Completion) void {
@@ -101,7 +101,7 @@ fn logCompleted(logger: *Logger, trace: *const RequestTrace, status_code: ?u16, 
         fields_storage[count] = LogField.string("error_code", err);
         count += 1;
     }
-    logger.child("request").info("Request completed", fields_storage[0..count]);
+    logger.child("request").logKind(.info, core.logging.LogRecordKind.request, "Request completed", fields_storage[0..count]);
 }
 
 fn generateTraceId(allocator: std.mem.Allocator) anyerror![]u8 {
@@ -128,4 +128,6 @@ test "request trace generates 16-char trace id" {
 
     try std.testing.expectEqual(@as(usize, 16), trace.trace_id.len);
     try std.testing.expectEqual(@as(usize, 2), memory_sink.count());
+    try std.testing.expectEqual(core.logging.LogRecordKind.request, memory_sink.recordAt(0).?.kind);
+    try std.testing.expectEqual(core.logging.LogRecordKind.request, memory_sink.recordAt(1).?.kind);
 }

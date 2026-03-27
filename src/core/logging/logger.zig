@@ -7,6 +7,7 @@ const sink_model = @import("sink.zig");
 pub const LogLevel = level_model.LogLevel;
 pub const LogField = record_model.LogField;
 pub const LogRecord = record_model.LogRecord;
+pub const LogRecordKind = record_model.LogRecordKind;
 pub const RedactMode = redact_model.RedactMode;
 pub const LogSink = sink_model.LogSink;
 
@@ -25,6 +26,12 @@ pub const TraceContextProvider = struct {
     }
 };
 
+pub const LoggerTruncationStats = struct {
+    truncated_subsystem_count: usize,
+    dropped_default_fields_count: usize,
+    dropped_runtime_fields_count: usize,
+};
+
 pub const LoggerOptions = struct {
     min_level: LogLevel = .info,
     redact_mode: RedactMode = .safe,
@@ -36,6 +43,9 @@ pub const Logger = struct {
     min_level: LogLevel = .info,
     redact_mode: RedactMode = .safe,
     trace_context_provider: ?TraceContextProvider = null,
+    truncated_subsystem_count: std.atomic.Value(usize) = std.atomic.Value(usize).init(0),
+    dropped_default_fields_count: std.atomic.Value(usize) = std.atomic.Value(usize).init(0),
+    dropped_runtime_fields_count: std.atomic.Value(usize) = std.atomic.Value(usize).init(0),
 
     const Self = @This();
 
@@ -68,7 +78,15 @@ pub const Logger = struct {
         return self.child(subsystem_name);
     }
 
-    fn log(self: *Self, level: LogLevel, subsystem_name: []const u8, message: []const u8, fields: []const LogField) void {
+    pub fn truncationStats(self: *const Self) LoggerTruncationStats {
+        return .{
+            .truncated_subsystem_count = self.truncated_subsystem_count.load(.monotonic),
+            .dropped_default_fields_count = self.dropped_default_fields_count.load(.monotonic),
+            .dropped_runtime_fields_count = self.dropped_runtime_fields_count.load(.monotonic),
+        };
+    }
+
+    fn log(self: *Self, level: LogLevel, kind: LogRecordKind, subsystem_name: []const u8, message: []const u8, fields: []const LogField) void {
         if (!self.min_level.allows(level)) {
             return;
         }
@@ -76,6 +94,7 @@ pub const Logger = struct {
         var record = LogRecord{
             .ts_unix_ms = std.time.milliTimestamp(),
             .level = level,
+            .kind = kind,
             .subsystem = subsystem_name,
             .message = message,
             .fields = fields,
@@ -89,6 +108,20 @@ pub const Logger = struct {
         }
 
         self.sink.write(&record);
+    }
+
+    fn noteTruncatedSubsystem(self: *Self) void {
+        _ = self.truncated_subsystem_count.fetchAdd(1, .monotonic);
+    }
+
+    fn noteDroppedDefaultFields(self: *Self, count: usize) void {
+        if (count == 0) return;
+        _ = self.dropped_default_fields_count.fetchAdd(count, .monotonic);
+    }
+
+    fn noteDroppedRuntimeFields(self: *Self, count: usize) void {
+        if (count == 0) return;
+        _ = self.dropped_runtime_fields_count.fetchAdd(count, .monotonic);
     }
 };
 
@@ -127,14 +160,18 @@ pub const SubsystemLogger = struct {
         if (next.default_field_count < max_default_fields) {
             next.default_fields_storage[next.default_field_count] = field;
             next.default_field_count += 1;
+        } else {
+            next.logger.noteDroppedDefaultFields(1);
         }
         return next;
     }
 
     pub fn withFields(self: Self, fields: []const LogField) Self {
         var next = self;
-        for (fields) |field| {
+        for (fields, 0..) |field, index| {
             if (next.default_field_count >= max_default_fields) {
+                const remaining = fields.len - index;
+                next.logger.noteDroppedDefaultFields(remaining);
                 break;
             }
             next.default_fields_storage[next.default_field_count] = field;
@@ -167,7 +204,15 @@ pub const SubsystemLogger = struct {
         self.emit(.fatal, message, fields);
     }
 
+    pub fn logKind(self: *const Self, level: LogLevel, kind: LogRecordKind, message: []const u8, fields: []const LogField) void {
+        self.emitKind(level, kind, message, fields);
+    }
+
     fn emit(self: *const Self, level: LogLevel, message: []const u8, fields: []const LogField) void {
+        self.emitKind(level, .generic, message, fields);
+    }
+
+    fn emitKind(self: *const Self, level: LogLevel, kind: LogRecordKind, message: []const u8, fields: []const LogField) void {
         var combined: [max_combined_fields]LogField = undefined;
         var redacted: [max_combined_fields]LogField = undefined;
         var combined_len: usize = 0;
@@ -182,6 +227,7 @@ pub const SubsystemLogger = struct {
 
         for (fields) |field| {
             if (combined_len >= max_combined_fields) {
+                self.logger.noteDroppedRuntimeFields(fields.len - (combined_len - self.default_field_count));
                 break;
             }
             combined[combined_len] = field;
@@ -194,13 +240,16 @@ pub const SubsystemLogger = struct {
             redacted[0..combined_len],
         );
 
-        self.logger.log(level, self.subsystem(), message, emitted_fields);
+        self.logger.log(level, kind, self.subsystem(), message, emitted_fields);
     }
 
     fn setSubsystem(self: *Self, subsystem_name: []const u8) void {
         const copy_len = @min(max_subsystem_len, subsystem_name.len);
         @memcpy(self.subsystem_storage[0..copy_len], subsystem_name[0..copy_len]);
         self.subsystem_len = copy_len;
+        if (copy_len < subsystem_name.len) {
+            self.logger.noteTruncatedSubsystem();
+        }
     }
 
     fn appendSubsystem(self: *Self, suffix: []const u8) void {
@@ -218,6 +267,9 @@ pub const SubsystemLogger = struct {
         const copy_len = @min(available, suffix.len);
         @memcpy(self.subsystem_storage[start .. start + copy_len], suffix[0..copy_len]);
         self.subsystem_len = start + copy_len;
+        if (copy_len < suffix.len) {
+            self.logger.noteTruncatedSubsystem();
+        }
     }
 };
 
@@ -326,4 +378,62 @@ test "logger injects trace context automatically" {
     try std.testing.expectEqualStrings("trc_01", memory_sink.latest().?.trace_id.?);
     try std.testing.expectEqualStrings("spn_01", memory_sink.latest().?.span_id.?);
     try std.testing.expectEqualStrings("req_01", memory_sink.latest().?.request_id.?);
+}
+
+test "logger tracks subsystem truncation" {
+    const memory_sink_model = @import("memory_sink.zig");
+
+    var memory_sink = memory_sink_model.MemorySink.init(std.testing.allocator, 2);
+    defer memory_sink.deinit();
+
+    var logger = Logger.init(memory_sink.asLogSink(), .info);
+    defer logger.deinit();
+
+    const long_name = "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz";
+    logger.child(long_name).info("truncated", &.{});
+
+    const stats = logger.truncationStats();
+    try std.testing.expect(stats.truncated_subsystem_count >= 1);
+}
+
+test "logger tracks dropped default and runtime fields" {
+    const memory_sink_model = @import("memory_sink.zig");
+
+    var memory_sink = memory_sink_model.MemorySink.init(std.testing.allocator, 4);
+    defer memory_sink.deinit();
+
+    var logger = Logger.init(memory_sink.asLogSink(), .info);
+    defer logger.deinit();
+
+    const default_fields = [_]LogField{
+        LogField.string("f1", "1"),
+        LogField.string("f2", "2"),
+        LogField.string("f3", "3"),
+        LogField.string("f4", "4"),
+        LogField.string("f5", "5"),
+        LogField.string("f6", "6"),
+        LogField.string("f7", "7"),
+        LogField.string("f8", "8"),
+        LogField.string("f9", "9"),
+        LogField.string("f10", "10"),
+    };
+    const runtime_fields = [_]LogField{
+        LogField.string("r1", "1"),
+        LogField.string("r2", "2"),
+        LogField.string("r3", "3"),
+        LogField.string("r4", "4"),
+        LogField.string("r5", "5"),
+        LogField.string("r6", "6"),
+        LogField.string("r7", "7"),
+        LogField.string("r8", "8"),
+        LogField.string("r9", "9"),
+        LogField.string("r10", "10"),
+    };
+
+    const subsystem_logger = logger.child("runtime").withFields(default_fields[0..]);
+    subsystem_logger.info("field pressure", runtime_fields[0..]);
+
+    const stats = logger.truncationStats();
+    try std.testing.expect(stats.dropped_default_fields_count >= 1);
+    try std.testing.expect(stats.dropped_runtime_fields_count >= 1);
 }

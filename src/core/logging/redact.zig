@@ -12,13 +12,14 @@ pub const RedactMode = enum {
 pub const REDACTED_VALUE = "[REDACTED]";
 
 pub fn redactField(mode: RedactMode, field: LogField) LogField {
-    if (!isSensitiveKey(mode, field.key)) {
+    if (!isSensitiveField(mode, field)) {
         return field;
     }
 
     return .{
         .key = field.key,
         .value = .{ .string = REDACTED_VALUE },
+        .sensitive = field.sensitive,
     };
 }
 
@@ -30,6 +31,16 @@ pub fn redactFields(mode: RedactMode, input: []const LogField, output: []LogFiel
     }
 
     return output[0..input.len];
+}
+
+pub fn isSensitiveField(mode: RedactMode, field: LogField) bool {
+    if (mode == .off) {
+        return false;
+    }
+    if (field.sensitive) {
+        return true;
+    }
+    return isSensitiveKey(mode, field.key);
 }
 
 pub fn isSensitiveKey(mode: RedactMode, key: []const u8) bool {
@@ -109,5 +120,30 @@ test "redact field replaces sensitive values with marker" {
     const redacted = redactField(.safe, field);
 
     try std.testing.expectEqualStrings("api_key", redacted.key);
+    try std.testing.expectEqualStrings(REDACTED_VALUE, redacted.value.string);
+}
+
+test "explicit sensitive field marking overrides heuristic matching" {
+    const field = LogField.string("project_root", "E:/secret/project").markSensitive();
+    const redacted = redactField(.safe, field);
+
+    try std.testing.expectEqualStrings("project_root", redacted.key);
+    try std.testing.expectEqualStrings(REDACTED_VALUE, redacted.value.string);
+    try std.testing.expect(redacted.sensitive);
+}
+
+test "explicit sensitive field marking is ignored when redaction is off" {
+    const field = LogField.sensitiveString("project_root", "E:/secret/project");
+    const redacted = redactField(.off, field);
+
+    try std.testing.expectEqualStrings("project_root", redacted.key);
+    try std.testing.expectEqualStrings("E:/secret/project", redacted.value.string);
+    try std.testing.expect(redacted.sensitive);
+}
+
+test "strict heuristic still redacts broader auth-related fields" {
+    const field = LogField.string("session_id", "abc123");
+    const redacted = redactField(.strict, field);
+
     try std.testing.expectEqualStrings(REDACTED_VALUE, redacted.value.string);
 }

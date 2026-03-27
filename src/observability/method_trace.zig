@@ -32,7 +32,7 @@ pub const MethodTrace = struct {
             fields[count] = LogField.uint("threshold_ms", threshold);
             count += 1;
         }
-        logger.child("method").debug("ENTRY", fields[0..count]);
+        logger.child("method").logKind(.debug, core.logging.LogRecordKind.method, "ENTRY", fields[0..count]);
         return trace;
     }
 
@@ -61,9 +61,9 @@ pub const MethodTrace = struct {
             count += 1;
         }
         if (beyond_threshold) {
-            self.logger.child("method").warn("EXIT", fields[0..count]);
+            self.logger.child("method").logKind(.warn, core.logging.LogRecordKind.method, "EXIT", fields[0..count]);
         } else {
-            self.logger.child("method").info("EXIT", fields[0..count]);
+            self.logger.child("method").logKind(.info, core.logging.LogRecordKind.method, "EXIT", fields[0..count]);
         }
     }
 
@@ -88,7 +88,7 @@ pub const MethodTrace = struct {
             fields[count] = LogField.string("error_code", code);
             count += 1;
         }
-        self.logger.child("method").warn("ERROR", fields[0..count]);
+        self.logger.child("method").logKind(.warn, core.logging.LogRecordKind.method, "ERROR", fields[0..count]);
     }
 
     pub fn deinit(self: *MethodTrace) void {
@@ -107,6 +107,8 @@ test "method trace emits entry and exit logs" {
     trace.finishSuccess("Ok(200)", false);
 
     try std.testing.expectEqual(@as(usize, 2), memory_sink.count());
+    try std.testing.expectEqual(core.logging.LogRecordKind.method, memory_sink.recordAt(0).?.kind);
+    try std.testing.expectEqual(core.logging.LogRecordKind.method, memory_sink.recordAt(1).?.kind);
     try std.testing.expectEqualStrings("ENTRY", memory_sink.recordAt(0).?.message);
     try std.testing.expectEqualStrings("EXIT", memory_sink.recordAt(1).?.message);
 }
