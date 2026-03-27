@@ -9,6 +9,18 @@ pub const LogFieldValue = record_model.LogFieldValue;
 pub const LogSink = sink_model.LogSink;
 pub const LogLevel = level_model.LogLevel;
 
+pub const TraceTextFileSinkStatus = struct {
+    path: []u8,
+    current_bytes: u64,
+    max_bytes: ?u64,
+    degraded: bool,
+    dropped_records: usize,
+
+    pub fn deinit(self: *TraceTextFileSinkStatus, allocator: std.mem.Allocator) void {
+        allocator.free(self.path);
+    }
+};
+
 pub const TraceTextFileSinkOptions = struct {
     include_observer: bool = false,
     include_runtime_dispatch: bool = false,
@@ -23,6 +35,7 @@ pub const TraceTextFileSink = struct {
     degraded: bool = false,
     dropped_records: usize = 0,
     options: TraceTextFileSinkOptions = .{},
+    mutex: std.Thread.Mutex = .{},
 
     const Self = @This();
 
@@ -50,6 +63,8 @@ pub const TraceTextFileSink = struct {
     }
 
     pub fn deinit(self: *Self) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
         self.allocator.free(self.path);
     }
 
@@ -60,7 +75,21 @@ pub const TraceTextFileSink = struct {
         };
     }
 
+    pub fn statusSnapshot(self: *Self, allocator: std.mem.Allocator) !TraceTextFileSinkStatus {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        return .{
+            .path = try allocator.dupe(u8, self.path),
+            .current_bytes = self.current_bytes,
+            .max_bytes = self.max_bytes,
+            .degraded = self.degraded,
+            .dropped_records = self.dropped_records,
+        };
+    }
+
     pub fn write(self: *Self, record: *const LogRecord) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
         self.writeInternal(record) catch {
             self.degraded = true;
             self.dropped_records += 1;
@@ -86,6 +115,10 @@ pub const TraceTextFileSink = struct {
         }
 
         try ensureParentDirectory(self.path);
+        // Future extension point:
+        // before opening the append file, a rotation/retention policy can inspect
+        // current_bytes, max_bytes, and on-disk trace file state to decide whether
+        // a new generation should be created.
         var file = try openAppendFile(self.path);
         defer file.close();
 
@@ -134,11 +167,22 @@ fn formatRecord(writer: anytype, record: *const LogRecord) !void {
     const time_text = try formatTimeOfDay(record.ts_unix_ms);
     try writer.print("[{s} {s}] ", .{ time_text, shortLevelText(record.level) });
 
+    if (try renderTyped(writer, record)) return;
     if (try renderSummaryTrace(writer, record)) return;
     if (try renderMethodTrace(writer, record)) return;
     if (try renderRequestTrace(writer, record)) return;
     if (try renderStepTrace(writer, record)) return;
     try renderGeneric(writer, record);
+}
+
+fn renderTyped(writer: anytype, record: *const LogRecord) !bool {
+    return switch (record.kind) {
+        .summary => try renderSummaryTrace(writer, record),
+        .method => try renderMethodTrace(writer, record),
+        .request => try renderRequestTrace(writer, record),
+        .step => try renderStepTrace(writer, record),
+        .generic => false,
+    };
 }
 
 fn renderSummaryTrace(writer: anytype, record: *const LogRecord) !bool {
@@ -423,6 +467,7 @@ test "trace text file sink writes human-readable method trace lines" {
     const record = LogRecord{
         .ts_unix_ms = 22,
         .level = .info,
+        .kind = .method,
         .subsystem = "method",
         .message = "EXIT",
         .trace_id = "trc_01",
@@ -464,6 +509,7 @@ test "trace text file sink can skip observer and framework command traces" {
     sink.write(&LogRecord{
         .ts_unix_ms = 1,
         .level = .debug,
+        .kind = .method,
         .subsystem = "method",
         .message = "ENTRY",
         .fields = &.{
@@ -474,6 +520,7 @@ test "trace text file sink can skip observer and framework command traces" {
     sink.write(&LogRecord{
         .ts_unix_ms = 1,
         .level = .info,
+        .kind = .method,
         .subsystem = "method",
         .message = "EXIT",
         .trace_id = "trc_01",
@@ -510,6 +557,7 @@ test "trace text file sink renders summary trace in ME/RT/BT/ET format" {
     sink.write(&LogRecord{
         .ts_unix_ms = 22,
         .level = .warn,
+        .kind = .summary,
         .subsystem = "summary",
         .message = "TRACE_SUMMARY",
         .trace_id = "trc_01",
@@ -525,4 +573,84 @@ test "trace text file sink renders summary trace in ME/RT/BT/ET format" {
     defer std.testing.allocator.free(contents);
 
     try std.testing.expect(std.mem.indexOf(u8, contents, "[00:00:00 WRN] TraceId:trc_01|ME:Auth.Login|RT:449|BT:N|ET:N") != null);
+}
+
+test "trace text file sink supports concurrent writes" {
+    const Writer = struct {
+        fn run(sink: *TraceTextFileSink, index: usize) void {
+            const record = LogRecord{
+                .ts_unix_ms = @intCast(index),
+                .level = .info,
+                .subsystem = "summary",
+                .message = "TRACE_SUMMARY",
+                .trace_id = "trc_concurrent",
+                .fields = &.{
+                    LogField.string("method", "Concurrent.Method"),
+                    LogField.uint("rt", 1),
+                    LogField.boolean("bt", false),
+                    LogField.string("et", "N"),
+                },
+            };
+            var i: usize = 0;
+            while (i < 40) : (i += 1) sink.write(&record);
+        }
+    };
+
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+
+    const root_path = try tmp_dir.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root_path);
+    const log_path = try std.fs.path.join(std.testing.allocator, &.{ root_path, "trace.log" });
+    defer std.testing.allocator.free(log_path);
+
+    var sink = try TraceTextFileSink.init(std.testing.allocator, log_path, 4096 * 64, .{});
+    defer sink.deinit();
+
+    const threads = [_]std.Thread{
+        try std.Thread.spawn(.{}, Writer.run, .{ &sink, 0 }),
+        try std.Thread.spawn(.{}, Writer.run, .{ &sink, 1 }),
+        try std.Thread.spawn(.{}, Writer.run, .{ &sink, 2 }),
+    };
+    for (threads) |thread| thread.join();
+
+    const contents = try tmp_dir.dir.readFileAlloc(std.testing.allocator, "trace.log", 4096 * 64);
+    defer std.testing.allocator.free(contents);
+    try std.testing.expect(std.mem.count(u8, contents, "\n") == 120);
+    try std.testing.expect(!sink.degraded);
+}
+
+test "trace text file sink exposes status snapshot" {
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+
+    const root_path = try tmp_dir.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root_path);
+    const log_path = try std.fs.path.join(std.testing.allocator, &.{ root_path, "trace.log" });
+    defer std.testing.allocator.free(log_path);
+
+    var sink = try TraceTextFileSink.init(std.testing.allocator, log_path, 8192, .{});
+    defer sink.deinit();
+
+    sink.write(&LogRecord{
+        .ts_unix_ms = 1,
+        .level = .info,
+        .kind = .summary,
+        .subsystem = "summary",
+        .message = "TRACE_SUMMARY",
+        .fields = &.{
+            LogField.string("method", "Status.Check"),
+            LogField.uint("rt", 1),
+            LogField.boolean("bt", false),
+            LogField.string("et", "N"),
+        },
+    });
+
+    var status = try sink.statusSnapshot(std.testing.allocator);
+    defer status.deinit(std.testing.allocator);
+
+    try std.testing.expectEqualStrings(log_path, status.path);
+    try std.testing.expect(status.current_bytes > 0);
+    try std.testing.expectEqual(@as(?u64, 8192), status.max_bytes);
+    try std.testing.expect(!status.degraded);
 }

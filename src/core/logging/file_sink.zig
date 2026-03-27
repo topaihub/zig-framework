@@ -5,6 +5,18 @@ const sink_model = @import("sink.zig");
 pub const LogRecord = record_model.LogRecord;
 pub const LogSink = sink_model.LogSink;
 
+pub const JsonlFileSinkStatus = struct {
+    path: []u8,
+    current_bytes: u64,
+    max_bytes: ?u64,
+    degraded: bool,
+    dropped_records: usize,
+
+    pub fn deinit(self: *JsonlFileSinkStatus, allocator: std.mem.Allocator) void {
+        allocator.free(self.path);
+    }
+};
+
 pub const JsonlFileSink = struct {
     allocator: std.mem.Allocator,
     path: []u8,
@@ -12,6 +24,7 @@ pub const JsonlFileSink = struct {
     current_bytes: u64 = 0,
     degraded: bool = false,
     dropped_records: usize = 0,
+    mutex: std.Thread.Mutex = .{},
 
     const Self = @This();
 
@@ -34,6 +47,8 @@ pub const JsonlFileSink = struct {
     }
 
     pub fn deinit(self: *Self) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
         self.allocator.free(self.path);
     }
 
@@ -44,7 +59,21 @@ pub const JsonlFileSink = struct {
         };
     }
 
+    pub fn statusSnapshot(self: *Self, allocator: std.mem.Allocator) !JsonlFileSinkStatus {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        return .{
+            .path = try allocator.dupe(u8, self.path),
+            .current_bytes = self.current_bytes,
+            .max_bytes = self.max_bytes,
+            .degraded = self.degraded,
+            .dropped_records = self.dropped_records,
+        };
+    }
+
     pub fn write(self: *Self, record: *const LogRecord) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
         self.writeInternal(record) catch {
             self.degraded = true;
             self.dropped_records += 1;
@@ -68,6 +97,10 @@ pub const JsonlFileSink = struct {
         }
 
         try ensureParentDirectory(self.path);
+        // Future extension point:
+        // before opening the append file, a rotation/retention policy can inspect
+        // current_bytes, max_bytes, and on-disk file state to decide whether to
+        // rotate the current file or prune old generations.
         var file = try openAppendFile(self.path);
         defer file.close();
 
@@ -169,4 +202,71 @@ test "jsonl file sink respects max bytes limit" {
     sink.write(&record);
 
     try std.testing.expect(sink.dropped_records >= 1);
+}
+
+test "jsonl file sink supports concurrent writes" {
+    const Writer = struct {
+        fn run(sink: *JsonlFileSink, index: usize) void {
+            const record = LogRecord{
+                .ts_unix_ms = @intCast(index),
+                .level = .info,
+                .subsystem = "jsonl-concurrency",
+                .message = "write",
+            };
+            var i: usize = 0;
+            while (i < 50) : (i += 1) sink.write(&record);
+        }
+    };
+
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+
+    const root_path = try tmp_dir.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root_path);
+    const log_path = try std.fs.path.join(std.testing.allocator, &.{ root_path, "concurrent.jsonl" });
+    defer std.testing.allocator.free(log_path);
+
+    var sink = try JsonlFileSink.init(std.testing.allocator, log_path, 4096 * 64);
+    defer sink.deinit();
+
+    const threads = [_]std.Thread{
+        try std.Thread.spawn(.{}, Writer.run, .{ &sink, 0 }),
+        try std.Thread.spawn(.{}, Writer.run, .{ &sink, 1 }),
+        try std.Thread.spawn(.{}, Writer.run, .{ &sink, 2 }),
+    };
+    for (threads) |thread| thread.join();
+
+    const contents = try tmp_dir.dir.readFileAlloc(std.testing.allocator, "concurrent.jsonl", 4096 * 64);
+    defer std.testing.allocator.free(contents);
+    try std.testing.expect(std.mem.count(u8, contents, "\n") == 150);
+    try std.testing.expect(!sink.degraded);
+}
+
+test "jsonl file sink exposes status snapshot" {
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+
+    const root_path = try tmp_dir.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root_path);
+    const log_path = try std.fs.path.join(std.testing.allocator, &.{ root_path, "snapshot.jsonl" });
+    defer std.testing.allocator.free(log_path);
+
+    var sink = try JsonlFileSink.init(std.testing.allocator, log_path, 4096);
+    defer sink.deinit();
+
+    const record = LogRecord{
+        .ts_unix_ms = 1,
+        .level = .info,
+        .subsystem = "status",
+        .message = "snapshot",
+    };
+    sink.write(&record);
+
+    var status = try sink.statusSnapshot(std.testing.allocator);
+    defer status.deinit(std.testing.allocator);
+
+    try std.testing.expectEqualStrings(log_path, status.path);
+    try std.testing.expect(status.current_bytes > 0);
+    try std.testing.expectEqual(@as(?u64, 4096), status.max_bytes);
+    try std.testing.expect(!status.degraded);
 }

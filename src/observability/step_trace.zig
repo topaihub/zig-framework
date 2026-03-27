@@ -49,11 +49,11 @@ pub const StepTrace = struct {
         if (error_code) |err| {
             fields[count] = LogField.string("error_code", err);
             count += 1;
-            self.logger.child(self.subsystem).warn("Step completed", fields[0..count]);
+            self.logger.child(self.subsystem).logKind(.warn, core.logging.LogRecordKind.step, "Step completed", fields[0..count]);
         } else if (beyond_threshold) {
-            self.logger.child(self.subsystem).warn("Step completed", fields[0..count]);
+            self.logger.child(self.subsystem).logKind(.warn, core.logging.LogRecordKind.step, "Step completed", fields[0..count]);
         } else {
-            self.logger.child(self.subsystem).info("Step completed", fields[0..count]);
+            self.logger.child(self.subsystem).logKind(.info, core.logging.LogRecordKind.step, "Step completed", fields[0..count]);
         }
     }
 
@@ -71,7 +71,7 @@ pub const StepTrace = struct {
             fields[count] = LogField.uint("threshold_ms", threshold);
             count += 1;
         }
-        self.logger.child(self.subsystem).info("Step started", fields[0..count]);
+        self.logger.child(self.subsystem).logKind(.info, core.logging.LogRecordKind.step, "Step started", fields[0..count]);
     }
 };
 
@@ -86,6 +86,8 @@ test "step trace emits started and completed logs" {
     trace.finish(null);
 
     try std.testing.expectEqual(@as(usize, 2), memory_sink.count());
+    try std.testing.expectEqual(core.logging.LogRecordKind.step, memory_sink.recordAt(0).?.kind);
+    try std.testing.expectEqual(core.logging.LogRecordKind.step, memory_sink.recordAt(1).?.kind);
     try std.testing.expectEqualStrings("Step started", memory_sink.recordAt(0).?.message);
     try std.testing.expectEqualStrings("Step completed", memory_sink.recordAt(1).?.message);
 }

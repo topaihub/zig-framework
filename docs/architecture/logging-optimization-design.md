@@ -176,6 +176,12 @@
 - 先在 logging 自己的字段模型里落显式敏感标记
 - 后续再做跨模块对齐
 
+当前结论：
+
+- 当前阶段不让 `logging` 直接强依赖 `FieldDefinition`
+- 未来若要对齐 `FieldDefinition.sensitive`，建议通过 adapter / helper 层把 schema 的 `sensitive` 信息映射到 `LogField.sensitive`
+- 因此当前阶段已经完成“评估是否应对齐”的判断：应对齐，但不应直接强耦合
+
 ## 7. 文件 sink 治理设计
 
 ### 7.1 增加只读状态接口
@@ -204,6 +210,12 @@
 - 在代码结构中预留 rotation/retention 扩展点
 - 不要求在这一轮把完整 rotation 做完
 
+当前结论：
+
+- 暂不抽共享 `file rotation helper`
+- 先保留 `JsonlFileSink` 与 `TraceTextFileSink` 各自的扩展注释与状态接口
+- 等 future 真正实现 rotation/retention 时，再根据共同语义决定是否抽共享 helper
+
 ## 8. examples 设计
 
 ### 8.1 对现有 `logging_demo.zig` 的处理
@@ -213,6 +225,11 @@
 - 保留，但明确标记为 app integration demo
 
 不要再把它当成 logging 主入口示例。
+
+当前结论：
+
+- 这一轮选择“保留并重新分类”
+- 当前阶段不重写 `logging_demo.zig`
 
 ### 8.2 新增 pure framework 示例
 

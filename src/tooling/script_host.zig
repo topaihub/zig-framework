@@ -67,7 +67,10 @@ pub const ScriptHost = struct {
         }
 
         const result = if (spec.expects_json_stdout)
-            try parseJsonResult(self.allocator, run_result.stdout)
+            parseJsonResult(self.allocator, run_result.stdout) catch |err| {
+                try self.emitEvent("script.failed", ctx.tool_id, @errorName(err));
+                return err;
+            }
         else
             script_contract.ScriptResult{
                 .ok = true,
@@ -318,4 +321,55 @@ test "script host rejects non-zero exit status" {
         .args = &.{ "-c", "import sys; print('{\"ok\": false}'); sys.exit(3)" },
         .timeout_ms = 1000,
     }));
+}
+
+test "script host logs stderr and emits failure events" {
+    var app_context = try runtime.AppContext.init(std.testing.allocator, .{
+        .console_log_enabled = false,
+    });
+    defer app_context.deinit();
+
+    var runner_impl = effects.NativeProcessRunner.init();
+    var host = ScriptHost.init(std.testing.allocator, runner_impl.runner(), app_context.logger, app_context.eventBus());
+
+    var effects_runtime = effects.EffectsRuntime.init(.{});
+    const ctx = tool_context.ToolContext{
+        .allocator = std.testing.allocator,
+        .request = .{
+            .request_id = "script_req_05",
+            .source = .@"test",
+            .authority = .public,
+        },
+        .tool_id = "script.stderr",
+        .logger = app_context.logger.child("script"),
+        .validated_params = &.{},
+        .event_bus = app_context.eventBus(),
+        .effects = &effects_runtime,
+    };
+
+    try std.testing.expectError(error.InvalidScriptJsonOutput, host.run(&ctx, .{
+        .program = "python",
+        .args = &.{ "-c", "import sys; sys.stderr.write('oops\\n'); print('not-json')" },
+        .timeout_ms = 1000,
+    }));
+
+    const events = try app_context.event_bus.snapshot(std.testing.allocator);
+    defer {
+        for (events) |*event| event.deinit(std.testing.allocator);
+        std.testing.allocator.free(events);
+    }
+    try std.testing.expect(events.len >= 2);
+    try std.testing.expectEqualStrings("script.started", events[0].topic);
+    try std.testing.expectEqualStrings("script.failed", events[1].topic);
+
+    const logs = try app_context.memory_sink.snapshot(std.testing.allocator);
+    defer {
+        for (logs) |*item| item.deinit(std.testing.allocator);
+        std.testing.allocator.free(logs);
+    }
+    var saw_stderr_log = false;
+    for (logs) |entry| {
+        if (std.mem.eql(u8, entry.message, "script stderr")) saw_stderr_log = true;
+    }
+    try std.testing.expect(saw_stderr_log);
 }

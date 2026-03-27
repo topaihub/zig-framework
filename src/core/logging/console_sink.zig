@@ -25,6 +25,7 @@ pub const ConsoleSink = struct {
     dropped_records: usize = 0,
     emitter_ctx: ?*anyopaque = null,
     emitter_fn: ?EmitFn = null,
+    mutex: std.Thread.Mutex = .{},
 
     const Self = @This();
 
@@ -43,6 +44,8 @@ pub const ConsoleSink = struct {
     }
 
     pub fn setEmitter(self: *Self, ctx: *anyopaque, emit_fn: EmitFn) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
         self.emitter_ctx = ctx;
         self.emitter_fn = emit_fn;
     }
@@ -59,6 +62,8 @@ pub const ConsoleSink = struct {
     pub fn flush(_: *Self) void {}
 
     pub fn write(self: *Self, record: *const LogRecord) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
         if (!self.min_level.allows(record.level)) {
             return;
         }
@@ -97,7 +102,7 @@ pub const ConsoleSink = struct {
                 const ts = try formatPrettyTimestamp(std.heap.page_allocator, record.ts_unix_ms);
                 defer std.heap.page_allocator.free(ts);
                 try writer.print("{s} {s: >5} ", .{ ts, prettyLevelText(record.level) });
-                if (!try renderPrettyRequestSpan(writer, record) and !try renderPrettyMethodTrace(writer, record) and !try renderPrettyStepSpan(writer, record)) {
+                if (!try renderPrettyTyped(writer, record) and !try renderPrettyRequestSpan(writer, record) and !try renderPrettyMethodTrace(writer, record) and !try renderPrettyStepSpan(writer, record)) {
                     try writer.print("{s}: {s}", .{ record.subsystem, record.message });
                     try appendContext(writer, record);
                     try appendFieldPairs(writer, record.fields);
@@ -144,6 +149,16 @@ pub const ConsoleSink = struct {
         return "console";
     }
 };
+
+fn renderPrettyTyped(writer: anytype, record: *const LogRecord) !bool {
+    return switch (record.kind) {
+        .request => try renderPrettyRequestSpan(writer, record),
+        .method => try renderPrettyMethodTrace(writer, record),
+        .step => try renderPrettyStepSpan(writer, record),
+        .summary => false,
+        .generic => false,
+    };
+}
 
 fn appendContext(writer: anytype, record: *const LogRecord) !void {
     if (record.trace_id) |trace_id| {
@@ -445,6 +460,7 @@ test "console sink pretty renders request span style" {
     const record = LogRecord{
         .ts_unix_ms = 22,
         .level = .info,
+        .kind = .request,
         .subsystem = "request",
         .message = "Request completed",
         .trace_id = "trc_01",
@@ -487,6 +503,7 @@ test "console sink pretty renders step trace style" {
     const record = LogRecord{
         .ts_unix_ms = 22,
         .level = .warn,
+        .kind = .step,
         .subsystem = "runtime/provider",
         .message = "Step completed",
         .fields = &.{
@@ -528,6 +545,7 @@ test "console sink pretty renders method trace style" {
     const record = LogRecord{
         .ts_unix_ms = 22,
         .level = .info,
+        .kind = .method,
         .subsystem = "method",
         .message = "EXIT",
         .trace_id = "trc_01",
@@ -548,4 +566,51 @@ test "console sink pretty renders method trace style" {
 
     try std.testing.expect(std.mem.indexOf(u8, capture.stdout.items, "TraceId:trc_01|EXIT|Controller.Auth.Login") != null);
     try std.testing.expect(std.mem.indexOf(u8, capture.stdout.items, "result=\"Ok(200)\"") != null);
+}
+
+test "console sink supports concurrent writes without degrading" {
+    const Capture = struct {
+        allocator: std.mem.Allocator,
+        mutex: std.Thread.Mutex = .{},
+        stdout: std.ArrayListUnmanaged(u8) = .empty,
+
+        fn deinit(self: *@This()) void {
+            self.stdout.deinit(self.allocator);
+        }
+
+        fn emit(ptr: *anyopaque, _: bool, bytes: []const u8) !void {
+            const self: *@This() = @ptrCast(@alignCast(ptr));
+            self.mutex.lock();
+            defer self.mutex.unlock();
+            try self.stdout.appendSlice(self.allocator, bytes);
+        }
+    };
+
+    const Writer = struct {
+        fn run(sink: *ConsoleSink, index: usize) void {
+            const record = LogRecord{
+                .ts_unix_ms = @intCast(index),
+                .level = .info,
+                .subsystem = "console-concurrency",
+                .message = "write",
+            };
+            var i: usize = 0;
+            while (i < 50) : (i += 1) sink.write(&record);
+        }
+    };
+
+    var capture = Capture{ .allocator = std.testing.allocator };
+    defer capture.deinit();
+    var sink = ConsoleSink.init(.trace, .compact);
+    sink.setEmitter(&capture, Capture.emit);
+
+    const threads = [_]std.Thread{
+        try std.Thread.spawn(.{}, Writer.run, .{ &sink, 0 }),
+        try std.Thread.spawn(.{}, Writer.run, .{ &sink, 1 }),
+        try std.Thread.spawn(.{}, Writer.run, .{ &sink, 2 }),
+    };
+    for (threads) |thread| thread.join();
+
+    try std.testing.expect(!sink.degraded);
+    try std.testing.expect(std.mem.count(u8, capture.stdout.items, "\n") == 150);
 }

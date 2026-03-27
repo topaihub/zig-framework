@@ -13,6 +13,8 @@
 
 - `framework/docs/architecture/logging.md`
 - `framework/docs/architecture/logging-tracing-design.md`
+- `framework/docs/architecture/logging-optimization-requirements.md`
+- `framework/docs/architecture/logging-optimization-design.md`
 
 这份文档的目标是告诉你：
 
@@ -219,6 +221,27 @@ summary_trace.finishError(.business);
 summary_trace.finishError(.auth);
 summary_trace.finishError(.system);
 ```
+
+### 4.6 tooling / workflow 如何接日志
+
+如果你在写：
+
+- `ToolRunner` 相关 tool
+- `ScriptHost` 相关脚本工具
+- `WorkflowRunner` 相关流程
+
+推荐使用方式是：
+
+- request 入口层：`request_trace`
+- 单个 tool / script / workflow run：普通结构化日志 + `MethodTrace`
+- 子步骤：`StepTrace`
+- 一次 workflow/tool 执行的摘要：`SummaryTrace`
+
+推荐理解：
+
+- `tooling` 负责“动作”
+- `workflow` 负责“编排”
+- logging 负责“让动作与编排可被追踪”
 
 字段语义：
 

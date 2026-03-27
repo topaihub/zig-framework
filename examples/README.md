@@ -2,17 +2,41 @@
 
 当前示例分成两类：
 
-- 观测与日志示例
+- 观测与日志示例（pure framework）
 - tooling / runtime substrate 示例
+- 应用集成示例
 
 ## 现有示例
 
 - `logging_demo.zig`
 - `logging_method_trace_demo.zig`
 - `logging_summary_trace_demo.zig`
+- `logging_basic_demo.zig`
+- `logging_redaction_demo.zig`
+- `logging_multi_sink_demo.zig`
+- `tooling_observability_demo.zig`
+- `workflow_observability_demo.zig`
 - `repo_health_check_demo.zig`
 - `script_markdown_fetch_demo.zig`
 - `business_services_demo.zig`
+
+## 日志示例分层
+
+### pure framework 示例
+
+- `logging_method_trace_demo.zig`
+- `logging_summary_trace_demo.zig`
+- `logging_basic_demo.zig`
+- `logging_redaction_demo.zig`
+- `logging_multi_sink_demo.zig`
+- `tooling_observability_demo.zig`
+- `workflow_observability_demo.zig`
+
+### app integration demo
+
+- `logging_demo.zig`
+
+`logging_demo.zig` 直接依赖 `ourclaw`，因此它属于“应用集成示例”，不应被视为 framework logging 的主入口示例。
 
 ## repo-health-check
 

@@ -388,3 +388,66 @@ test "tool runner maps script-backed failures" {
         .params = &.{},
     }));
 }
+
+test "tool runner emits events and logs for native tool execution" {
+    const Demo = struct {
+        fn call(ctx: *const tool_context.ToolContext) ![]u8 {
+            ctx.logger.info("tool executing", &.{@import("../root.zig").LogField.string("mode", "test")});
+            return ctx.allocator.dupe(u8, "{\"logged\":true}");
+        }
+    };
+
+    var app_context = try runtime.AppContext.init(std.testing.allocator, .{
+        .console_log_enabled = false,
+    });
+    defer app_context.deinit();
+
+    var effects_runtime = effects.EffectsRuntime.init(.{});
+    var registry = tool_registry.ToolRegistry.init(std.testing.allocator);
+    defer registry.deinit();
+    try registry.register(.{
+        .id = "demo.observed",
+        .description = "observed tool",
+        .native_handler = Demo.call,
+    });
+
+    var runner = ToolRunner.init(
+        std.testing.allocator,
+        &registry,
+        &effects_runtime,
+        null,
+        app_context.logger,
+        app_context.eventBus(),
+    );
+
+    var result = try runner.run(.{
+        .tool_id = "demo.observed",
+        .request = .{
+            .request_id = "tool_req_obs_01",
+            .source = .@"test",
+            .authority = .public,
+        },
+        .params = &.{},
+    });
+    defer result.deinit(std.testing.allocator);
+
+    const events = try app_context.event_bus.snapshot(std.testing.allocator);
+    defer {
+        for (events) |*event| event.deinit(std.testing.allocator);
+        std.testing.allocator.free(events);
+    }
+    try std.testing.expect(events.len >= 2);
+    try std.testing.expectEqualStrings("tool.started", events[0].topic);
+    try std.testing.expectEqualStrings("tool.completed", events[1].topic);
+
+    const logs = try app_context.memory_sink.snapshot(std.testing.allocator);
+    defer {
+        for (logs) |*item| item.deinit(std.testing.allocator);
+        std.testing.allocator.free(logs);
+    }
+    var saw_tool_log = false;
+    for (logs) |entry| {
+        if (std.mem.eql(u8, entry.message, "tool executing")) saw_tool_log = true;
+    }
+    try std.testing.expect(saw_tool_log);
+}

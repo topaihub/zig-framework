@@ -7,11 +7,13 @@ pub const LogLevel = level_model.LogLevel;
 pub const LogField = record_model.LogField;
 pub const LogFieldValue = record_model.LogFieldValue;
 pub const LogRecord = record_model.LogRecord;
+pub const LogRecordKind = record_model.LogRecordKind;
 pub const LogSink = sink_model.LogSink;
 
 pub const StoredLogRecord = struct {
     ts_unix_ms: i64,
     level: LogLevel,
+    kind: LogRecordKind,
     subsystem: []const u8,
     message: []const u8,
     trace_id: ?[]const u8 = null,
@@ -35,6 +37,7 @@ pub const StoredLogRecord = struct {
         return .{
             .ts_unix_ms = record.ts_unix_ms,
             .level = record.level,
+            .kind = record.kind,
             .subsystem = try allocator.dupe(u8, record.subsystem),
             .message = try allocator.dupe(u8, record.message),
             .trace_id = try cloneOptionalString(allocator, record.trace_id),
@@ -62,6 +65,32 @@ pub const StoredLogRecord = struct {
             }
         }
         allocator.free(self.fields);
+    }
+
+    pub fn cloneStored(self: *const StoredLogRecord, allocator: std.mem.Allocator) !StoredLogRecord {
+        const fields = try allocator.alloc(LogField, self.fields.len);
+        errdefer allocator.free(fields);
+
+        for (self.fields, 0..) |field, index| {
+            fields[index] = .{
+                .key = try allocator.dupe(u8, field.key),
+                .value = try cloneFieldValue(allocator, field.value),
+            };
+        }
+
+        return .{
+            .ts_unix_ms = self.ts_unix_ms,
+            .level = self.level,
+            .kind = self.kind,
+            .subsystem = try allocator.dupe(u8, self.subsystem),
+            .message = try allocator.dupe(u8, self.message),
+            .trace_id = try cloneOptionalString(allocator, self.trace_id),
+            .span_id = try cloneOptionalString(allocator, self.span_id),
+            .request_id = try cloneOptionalString(allocator, self.request_id),
+            .error_code = try cloneOptionalString(allocator, self.error_code),
+            .duration_ms = self.duration_ms,
+            .fields = fields,
+        };
     }
 };
 
@@ -126,6 +155,28 @@ pub const MemorySink = struct {
         return self.records.items.len;
     }
 
+    /// Returns an owned snapshot of all currently buffered records.
+    /// Prefer this API in concurrent or long-lived consumers.
+    pub fn snapshot(self: *const Self, allocator: std.mem.Allocator) ![]StoredLogRecord {
+        const mutable_self: *Self = @constCast(@ptrCast(self));
+        mutable_self.mutex.lock();
+        defer mutable_self.mutex.unlock();
+
+        const cloned = try allocator.alloc(StoredLogRecord, self.records.items.len);
+        errdefer allocator.free(cloned);
+
+        for (self.records.items, 0..) |*record, index| {
+            cloned[index] = try record.cloneStored(allocator);
+            errdefer {
+                var i: usize = 0;
+                while (i <= index) : (i += 1) cloned[i].deinit(allocator);
+            }
+        }
+        return cloned;
+    }
+
+    /// Returns a pointer into internal storage and is only safe for
+    /// immediate inspection in controlled/testing scenarios.
     pub fn latest(self: *const Self) ?*const StoredLogRecord {
         const mutable_self: *Self = @constCast(@ptrCast(self));
         mutable_self.mutex.lock();
@@ -136,6 +187,8 @@ pub const MemorySink = struct {
         return &self.records.items[self.records.items.len - 1];
     }
 
+    /// Returns a pointer into internal storage and is only safe for
+    /// immediate inspection in controlled/testing scenarios.
     pub fn recordAt(self: *const Self, index: usize) ?*const StoredLogRecord {
         const mutable_self: *Self = @constCast(@ptrCast(self));
         mutable_self.mutex.lock();
@@ -255,6 +308,7 @@ test "memory sink clones fields and supports erased interface" {
     try std.testing.expectEqual(@as(usize, 1), sink.count());
     try std.testing.expectEqual(@as(usize, 1), sink.flush_count);
     try std.testing.expectEqualStrings("config", sink.latest().?.subsystem);
+    try std.testing.expectEqual(LogRecordKind.generic, sink.latest().?.kind);
     try std.testing.expectEqualStrings("gateway.port", sink.latest().?.fields[0].value.string);
 }
 
@@ -287,4 +341,65 @@ test "memory sink supports concurrent writes without corrupting storage" {
 
     try std.testing.expectEqual(@as(usize, 800), sink.count());
     try std.testing.expect(sink.latest() != null);
+}
+
+test "memory sink snapshot returns owned stable copies" {
+    var sink = MemorySink.init(std.testing.allocator, 8);
+    defer sink.deinit();
+
+    const record = LogRecord{
+        .ts_unix_ms = 1,
+        .level = .info,
+        .subsystem = "snapshot",
+        .message = "hello",
+        .fields = &.{LogField.string("path", "README.md")},
+    };
+    sink.write(&record);
+
+    const snapshot = try sink.snapshot(std.testing.allocator);
+    defer {
+        for (snapshot) |*item| item.deinit(std.testing.allocator);
+        std.testing.allocator.free(snapshot);
+    }
+
+    try std.testing.expectEqual(@as(usize, 1), snapshot.len);
+    try std.testing.expectEqualStrings("snapshot", snapshot[0].subsystem);
+    try std.testing.expectEqualStrings("README.md", snapshot[0].fields[0].value.string);
+}
+
+test "memory sink snapshot is safe during concurrent writes" {
+    const Writer = struct {
+        fn run(sink: *MemorySink, base: usize) !void {
+            var i: usize = 0;
+            while (i < 100) : (i += 1) {
+                const record = LogRecord{
+                    .ts_unix_ms = @intCast(base + i),
+                    .level = .info,
+                    .subsystem = "snapshot-concurrency",
+                    .message = "write",
+                };
+                sink.write(&record);
+                std.Thread.sleep(1 * std.time.ns_per_ms);
+            }
+        }
+    };
+
+    var sink = MemorySink.init(std.testing.allocator, 1024);
+    defer sink.deinit();
+
+    const threads = [_]std.Thread{
+        try std.Thread.spawn(.{}, Writer.run, .{ &sink, 0 }),
+        try std.Thread.spawn(.{}, Writer.run, .{ &sink, 1000 }),
+    };
+
+    var sample_count: usize = 0;
+    while (sample_count < 20) : (sample_count += 1) {
+        const snapshot = try sink.snapshot(std.testing.allocator);
+        for (snapshot) |*item| item.deinit(std.testing.allocator);
+        std.testing.allocator.free(snapshot);
+        std.Thread.sleep(2 * std.time.ns_per_ms);
+    }
+
+    for (threads) |thread| thread.join();
+    try std.testing.expect(sink.count() > 0);
 }
