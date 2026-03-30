@@ -66,5 +66,8 @@
 11. `framework/docs/architecture/tooling.md`
 12. `framework/docs/architecture/workflow.md`
 13. `framework/docs/architecture/script-contract.md`
+14. `framework/docs/architecture/framework-consumer-integration-phase1-requirements.md`
+15. `framework/docs/architecture/framework-consumer-integration-phase1-design.md`
+16. `framework/docs/architecture/framework-consumer-integration-phase1-tasks.md`
 
 如果你想知道“ourclaw 怎样使用这些能力”，再读 `ourclaw/docs/architecture/`。
