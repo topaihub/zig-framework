@@ -65,3 +65,22 @@
 一句话总结：
 
 > `ourclaw` 适合优先把 deterministic tooling、workflow 和 service facade 模式继续交给 `framework`，但 gateway / daemon / channel 等 service runtime 产品能力仍应暂时保留在 `ourclaw`。
+
+## 6. Phase 1 已实现切片
+
+当前已经完成一个最小真实接入：
+
+- 在 `ourclaw/src/framework_integration/*` 中新增薄桥接层
+- 在 `CommandServices` 中暴露 framework tooling bridge
+- 新增 `diagnostics.repo_health` 命令，通过 service facade 调用 `framework.RepoHealthCheckTool`
+
+这次接入验证了：
+
+- `BusinessServices` / `CommandServices` 确实适合作为 framework substrate 的消费面
+- `ourclaw` 可以通过薄桥接层消费 `framework.ToolingRuntime`
+- 接入不需要改 gateway / daemon / channel 主链路
+
+这次接入没有做的事：
+
+- 不把 service manager、runtime host、pairing、channel runtime 下沉到 `framework`
+- 不把 `ourclaw` 原有 command surface 大规模迁移成 framework commands
