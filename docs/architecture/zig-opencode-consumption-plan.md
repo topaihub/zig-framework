@@ -70,3 +70,22 @@
 一句话总结：
 
 > `zig-opencode` 适合把 deterministic tool 与 orchestration substrate 逐步交给 `framework`，但不应把 AI session / provider / prompt 主链路过早下沉。
+
+## 6. Phase 1 已实现切片
+
+当前已经完成一个最小真实接入：
+
+- 在 `zig-opencode/src/framework_integration/*` 中新增薄桥接层
+- 由桥接层持有 `framework.ToolingRuntime`
+- 将 `framework.RepoHealthCheckTool` 适配为 `zig-opencode` builtin tool `repo_health_check`
+
+这次接入验证了：
+
+- `framework/tooling` 可以被 `zig-opencode` 消费，而不必复制 deterministic tool host
+- `zig-opencode` 可以把 framework-backed tool 包装回自身 builtin tool surface
+- 接入不需要改 session / provider / prompt 主链路
+
+这次接入没有做的事：
+
+- 不把 `framework` command surface 直接混进 `zig-opencode`
+- 不把 provider runtime、session runtime、prompt assembly 下沉到 `framework`
