@@ -143,6 +143,7 @@ pub const RotatingFileSink = struct {
                         .uint => |u| std.fmt.format(w, "{d}", .{u}) catch {},
                         .float => |f| std.fmt.format(w, "{d:.2}", .{f}) catch {},
                         .bool => |b| std.fmt.format(w, "{}", .{b}) catch {},
+                        .null => {},
                     }
                 }
             },
