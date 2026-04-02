@@ -22,6 +22,7 @@
 - `ScriptHost`
 - `ToolingRuntime`
 - `CommandSurface`
+- `StdioSurface`
 - native tool helper
 
 ## 3. 设计意图
@@ -39,6 +40,7 @@
 - `ToolExecutionEnvelope` 与现有 contracts 的更正式对齐
 - authority / risk policy 的更完整 hook
 - script-backed tool 错误映射细化
+- 更完整的 adapter 面（例如后续的 `http_surface`）
 
 ## 5. 示例
 
@@ -52,5 +54,16 @@
 - direct tool 调用
 - command surface 调用
 - script-backed tool
+- stdio surface 调用
 
 都已经能在同一条 execution substrate 上工作。
+
+## 6. Phase 2A 的当前价值
+
+`stdio_surface` 补上之后，`tooling` 已经不再只服务 framework 内部 command model。
+
+现在它已经开始具备：
+
+- 作为 skill backend host 的潜力
+- 作为 agent tool host 的最小协议出口
+- 作为 workflow-backed stdio worker 的最小能力
