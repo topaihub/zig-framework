@@ -26,6 +26,22 @@
 - [x] 2.2 在 `framework/docs/README.md` 中加入 phase 2 阅读入口
 - [ ] 2.3 在 implementation guide 中补 phase 2 的边界约束摘要
 
+## 2A. 阶段拆分说明
+
+建议将 phase 2 明确拆成：
+
+- `Phase 2A`
+  - workflow hardening
+  - `stdio_surface`
+- `Phase 2B`
+  - `agentkit`
+  - `zig-opencode` 第二批接入
+- `Phase 2C`
+  - `servicekit`
+  - `ourclaw` 第二批接入
+
+后续若继续拆更细任务，应优先按这三个子阶段展开。
+
 ## 3. Workflow Hardening
 
 - [x] 3.1 为 `src/workflow/step_types.zig` 增加 `branch` step

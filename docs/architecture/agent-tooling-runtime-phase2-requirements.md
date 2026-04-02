@@ -77,6 +77,20 @@ phase 2 明确不做：
 - 把 `agentkit` / `servicekit` 从预留边界推进到最小可用 kit
 - 把 `tooling` 扩展到更适合真实 skill backend / CLI / consumer app 消费
 
+同时建议把 phase 2 继续拆成三个可管理的阶段包：
+
+- `Phase 2A`
+  - workflow hardening
+  - `stdio` adapter
+- `Phase 2B`
+  - `agentkit` 最小可用层
+  - `zig-opencode` 第二批消费验证
+- `Phase 2C`
+  - `servicekit` 最小可用层
+  - `ourclaw` 第二批消费验证
+
+这样可以避免 phase 2 变成一个过大的“总包阶段”，导致完成判定失真。
+
 ## 5. 总体需求
 
 ### Requirement 1: phase 2 SHALL 以平台中层强化为目标
@@ -275,7 +289,7 @@ phase 2 的新增能力必须继续接入：
 
 ## 13. 验收需求
 
-### Requirement 20: phase 2 完成时，workflow MUST 支持真实可恢复流程
+### Requirement 20: phase 2A 完成时，workflow MUST 支持真实可恢复流程
 
 至少应存在一条真实示例或测试，证明 workflow 能：
 
@@ -283,7 +297,7 @@ phase 2 的新增能力必须继续接入：
 - 中断后恢复
 - 跑过多 step 流程
 
-### Requirement 21: phase 2 完成时，framework MUST 提供至少一个新的外部消费 adapter
+### Requirement 21: phase 2A 完成时，framework MUST 提供至少一个新的外部消费 adapter
 
 至少应有：
 
@@ -293,11 +307,11 @@ phase 2 的新增能力必须继续接入：
 
 其中之一作为真实可运行 adapter。
 
-### Requirement 22: phase 2 完成时，agentkit 与 servicekit MUST 都有最小真实消费验证
+### Requirement 22: phase 2B / 2C 完成时，agentkit 与 servicekit MUST 都有最小真实消费验证
 
 不能只有模块存在，而没有真实消费方验证。
 
-### Requirement 23: phase 2 完成时，至少存在一条“从模板到运行”的清晰开发路径
+### Requirement 23: phase 2 整体完成时，至少存在一条“从模板到运行”的清晰开发路径
 
 也就是说：
 
