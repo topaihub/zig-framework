@@ -28,6 +28,24 @@ Phase 2
 - tooling 要从 command-only 走向可对外消费
 - `zig-opencode` / `ourclaw` 要从“最小切片验证”走向“稳定接入模式”
 
+为了让实施更可控，建议把 phase 2 分解为：
+
+```text
+Phase 2A
+  = Workflow Hardening
+  + stdio adapter
+
+Phase 2B
+  = AgentKit minimal usable layer
+  + zig-opencode second integration slice
+
+Phase 2C
+  = ServiceKit minimal usable layer
+  + ourclaw second integration slice
+```
+
+这样 phase 2 不会被误当成“一个必须同时完成所有中层强化的大包”。
+
 ## 3. Phase 2 总体结构
 
 建议 phase 2 的整体结构理解为：
@@ -126,6 +144,13 @@ phase 2 建议新增这些 step：
 - 分布式恢复
 - 多副本协作
 - 动态 DSL replay
+
+需要明确的是：
+
+- `checkpoint_store.zig` 属于 Phase 2A Batch A
+- `policy.zig`、`resume.zig`、`builtin_steps.zig` 可以在 Batch B 或之后继续补
+
+也就是说，设计图中的模块名不应被理解为“Batch A 全部必须同时落地”。
 
 ### 4.5 并行模型
 
@@ -318,6 +343,21 @@ phase 2 的文档入口建议形成以下层次：
 4. `servicekit` 最小可用层
 5. consumer integration 第二批切片
 6. examples / templates / docs
+
+若进一步细化，则建议明确写成：
+
+1. `Phase 2A / Batch A`
+   - checkpoint / resume foundation
+2. `Phase 2A / Batch B`
+   - `branch / parallel / wait_event / ask_*`
+3. `Phase 2A / Batch C`
+   - `stdio_surface`
+4. `Phase 2B`
+   - `agentkit`
+   - `zig-opencode` 第二批接入
+5. `Phase 2C`
+   - `servicekit`
+   - `ourclaw` 第二批接入
 
 这个顺序的好处是：
 
