@@ -11,6 +11,7 @@ pub const file_sink = @import("file_sink.zig");
 pub const trace_text_file_sink = @import("trace_text_file_sink.zig");
 pub const multi_sink = @import("multi_sink.zig");
 pub const redact = @import("redact.zig");
+pub const rotating_file_sink = @import("rotating_file_sink.zig");
 pub const logger = @import("logger.zig");
 
 pub const LogLevel = level.LogLevel;
@@ -30,6 +31,9 @@ pub const TraceTextFileSinkStatus = trace_text_file_sink.TraceTextFileSinkStatus
 pub const TraceTextFileSinkOptions = trace_text_file_sink.TraceTextFileSinkOptions;
 pub const MultiSink = multi_sink.MultiSink;
 pub const RedactMode = redact.RedactMode;
+pub const RotatingFileSink = rotating_file_sink.RotatingFileSink;
+pub const RotatingFileSinkConfig = rotating_file_sink.RotatingFileSinkConfig;
+pub const RotatingFileSinkStatus = rotating_file_sink.RotatingFileSinkStatus;
 pub const Logger = logger.Logger;
 pub const LoggerTruncationStats = logger.LoggerTruncationStats;
 pub const LoggerOptions = logger.LoggerOptions;

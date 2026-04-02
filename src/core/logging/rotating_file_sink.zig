@@ -1,0 +1,216 @@
+const std = @import("std");
+const record_model = @import("record.zig");
+const sink_model = @import("sink.zig");
+
+pub const LogRecord = record_model.LogRecord;
+pub const LogSink = sink_model.LogSink;
+
+pub const RotatingFileSinkConfig = struct {
+    /// Directory for log files (created if missing).
+    log_dir: []const u8 = "logs",
+    /// Filename prefix (e.g. "app" → "logs/app-2026-04-02.log").
+    prefix: []const u8 = "app",
+    /// Max bytes per file before rotating. Default 100 MB.
+    max_file_bytes: u64 = 100 * 1024 * 1024,
+};
+
+pub const RotatingFileSink = struct {
+    allocator: std.mem.Allocator,
+    config: RotatingFileSinkConfig,
+    mutex: std.Thread.Mutex = .{},
+    current_date: [10]u8 = .{0} ** 10,
+    current_file: ?std.fs.File = null,
+    current_size: u64 = 0,
+    current_part: u32 = 0,
+    total_records: u64 = 0,
+    dropped_records: u64 = 0,
+
+    const Self = @This();
+
+    pub fn init(allocator: std.mem.Allocator, cfg: RotatingFileSinkConfig) Self {
+        std.fs.cwd().makePath(cfg.log_dir) catch {};
+        return .{ .allocator = allocator, .config = cfg };
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        if (self.current_file) |*f| f.close();
+        self.current_file = null;
+    }
+
+    pub fn sink(self: *Self) LogSink {
+        return .{ .ptr = @ptrCast(self), .vtable = &vtable };
+    }
+
+    pub fn status(self: *Self) RotatingFileSinkStatus {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        return .{
+            .total_records = self.total_records,
+            .dropped_records = self.dropped_records,
+            .current_size = self.current_size,
+            .current_part = self.current_part,
+            .current_date = self.current_date,
+        };
+    }
+
+    const vtable = LogSink.VTable{
+        .write = writeErased,
+        .flush = flushErased,
+        .deinit = deinitErased,
+        .name = nameErased,
+    };
+
+    fn writeErased(ptr: *anyopaque, rec: *const LogRecord) void {
+        const self: *Self = @ptrCast(@alignCast(ptr));
+        self.writeRecord(rec);
+    }
+
+    fn flushErased(_: *anyopaque) void {}
+
+    fn deinitErased(ptr: *anyopaque) void {
+        const self: *Self = @ptrCast(@alignCast(ptr));
+        self.deinit();
+    }
+
+    fn nameErased(_: *anyopaque) []const u8 {
+        return "rotating_file";
+    }
+
+    fn writeRecord(self: *Self, rec: *const LogRecord) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        // Render JSONL
+        var buf: std.ArrayListUnmanaged(u8) = .empty;
+        defer buf.deinit(self.allocator);
+        rec.writeJson(buf.writer(self.allocator)) catch {
+            self.dropped_records += 1;
+            return;
+        };
+        buf.append(self.allocator, '\n') catch {
+            self.dropped_records += 1;
+            return;
+        };
+
+        // Get today's date
+        const ts = std.time.timestamp();
+        const epoch_secs: u64 = @intCast(if (ts > 0) ts else 0);
+        var date_buf: [10]u8 = undefined;
+        epochToDate(epoch_secs, &date_buf);
+
+        // Check if we need a new file
+        const date_changed = !std.mem.eql(u8, &self.current_date, &date_buf);
+        const size_exceeded = self.current_size + buf.items.len > self.config.max_file_bytes;
+
+        if (self.current_file == null or date_changed or size_exceeded) {
+            if (self.current_file) |*f| f.close();
+
+            if (date_changed) {
+                @memcpy(&self.current_date, &date_buf);
+                self.current_part = 0;
+            } else if (size_exceeded) {
+                self.current_part += 1;
+            }
+            self.current_size = 0;
+
+            // Build path
+            var path_buf: [256]u8 = undefined;
+            const path = if (self.current_part == 0)
+                std.fmt.bufPrint(&path_buf, "{s}/{s}-{s}.log", .{
+                    self.config.log_dir, self.config.prefix, self.current_date,
+                }) catch return
+            else
+                std.fmt.bufPrint(&path_buf, "{s}/{s}-{s}.{d}.log", .{
+                    self.config.log_dir, self.config.prefix, self.current_date, self.current_part,
+                }) catch return;
+
+            std.fs.cwd().makePath(self.config.log_dir) catch {};
+            const file = std.fs.cwd().createFile(path, .{ .truncate = false }) catch {
+                self.dropped_records += 1;
+                return;
+            };
+            // Seek to end for append
+            const stat = file.stat() catch {
+                file.close();
+                self.dropped_records += 1;
+                return;
+            };
+            file.seekTo(stat.size) catch {};
+            self.current_size = stat.size;
+            self.current_file = file;
+        }
+
+        // Write
+        if (self.current_file) |f| {
+            f.writeAll(buf.items) catch {
+                self.dropped_records += 1;
+                return;
+            };
+            self.current_size += buf.items.len;
+            self.total_records += 1;
+        }
+    }
+};
+
+pub const RotatingFileSinkStatus = struct {
+    total_records: u64,
+    dropped_records: u64,
+    current_size: u64,
+    current_part: u32,
+    current_date: [10]u8,
+};
+
+/// Convert Unix epoch seconds to YYYY-MM-DD.
+pub fn epochToDate(epoch_secs: u64, buf: *[10]u8) void {
+    var d = epoch_secs / 86400;
+    var y: u32 = 1970;
+    while (true) {
+        const diy: u64 = if (isLeap(y)) 366 else 365;
+        if (d < diy) break;
+        d -= diy;
+        y += 1;
+    }
+    const mdays = if (isLeap(y))
+        [_]u8{ 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 }
+    else
+        [_]u8{ 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+    var m: u8 = 0;
+    while (m < 12) : (m += 1) {
+        if (d < mdays[m]) break;
+        d -= mdays[m];
+    }
+    _ = std.fmt.bufPrint(buf, "{d:0>4}-{d:0>2}-{d:0>2}", .{ y, m + 1, @as(u32, @intCast(d)) + 1 }) catch {};
+}
+
+fn isLeap(y: u32) bool {
+    return (y % 4 == 0 and y % 100 != 0) or (y % 400 == 0);
+}
+
+test "epochToDate epoch zero is 1970-01-01" {
+    var buf: [10]u8 = undefined;
+    epochToDate(0, &buf);
+    try std.testing.expectEqualStrings("1970-01-01", &buf);
+}
+
+test "epochToDate known date" {
+    var buf: [10]u8 = undefined;
+    // 2024-01-01 00:00:00 UTC = 1704067200
+    epochToDate(1704067200, &buf);
+    try std.testing.expectEqualStrings("2024-01-01", &buf);
+}
+
+test "rotating file sink init and status" {
+    var s = RotatingFileSink.init(std.testing.allocator, .{
+        .log_dir = "_test_rotating_logs",
+        .prefix = "test",
+        .max_file_bytes = 1024,
+    });
+    defer s.deinit();
+    defer std.fs.cwd().deleteTree("_test_rotating_logs") catch {};
+
+    const st = s.status();
+    try std.testing.expectEqual(@as(u64, 0), st.total_records);
+    try std.testing.expectEqual(@as(u64, 0), st.dropped_records);
+}
