@@ -5,6 +5,7 @@ const core = @import("../core/root.zig");
 const effects = @import("../effects/root.zig");
 const framework = @import("../root.zig");
 const runtime = @import("../runtime/root.zig");
+const checkpoint_store = @import("checkpoint_store.zig");
 const definition = @import("definition.zig");
 const state = @import("state.zig");
 const step_types = @import("step_types.zig");
@@ -16,6 +17,7 @@ pub const WorkflowRunner = struct {
     logger: ?*core.logging.Logger = null,
     event_bus: ?runtime.EventBus = null,
     task_runner: ?*runtime.TaskRunner = null,
+    checkpoints: ?checkpoint_store.WorkflowCheckpointStore = null,
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -24,6 +26,7 @@ pub const WorkflowRunner = struct {
         logger: ?*core.logging.Logger,
         event_bus: ?runtime.EventBus,
         task_runner: ?*runtime.TaskRunner,
+        checkpoints: ?checkpoint_store.WorkflowCheckpointStore,
     ) WorkflowRunner {
         return .{
             .allocator = allocator,
@@ -32,10 +35,22 @@ pub const WorkflowRunner = struct {
             .logger = logger,
             .event_bus = event_bus,
             .task_runner = task_runner,
+            .checkpoints = checkpoints,
         };
     }
 
     pub fn run(self: *WorkflowRunner, workflow: definition.WorkflowDefinition) !state.WorkflowRunResult {
+        const run_id = try std.fmt.allocPrint(self.allocator, "{s}:{d}", .{ workflow.id, std.time.milliTimestamp() });
+        defer self.allocator.free(run_id);
+        return self.runWithCheckpoint(workflow, run_id, null);
+    }
+
+    pub fn runWithCheckpoint(
+        self: *WorkflowRunner,
+        workflow: definition.WorkflowDefinition,
+        run_id: []const u8,
+        resume_from: ?state.WorkflowCheckpoint,
+    ) !state.WorkflowRunResult {
         var method_trace: ?framework.MethodTrace = null;
         var summary_trace: ?framework.SummaryTrace = null;
         if (self.logger) |logger| {
@@ -58,22 +73,70 @@ pub const WorkflowRunner = struct {
             if (summary_trace) |*trace| trace.deinit();
         }
 
-        try self.emitEvent("workflow.started", workflow.id, null);
-        self.logInfo("workflow started", workflow.id, &.{
-            framework.LogField.int("step_count", @intCast(workflow.steps.len)),
-        });
+        var step_statuses = try self.allocator.alloc(state.WorkflowStepStatus, workflow.steps.len);
+        defer self.allocator.free(step_statuses);
+        @memset(step_statuses, .pending);
+
         var result: state.WorkflowRunResult = .{
             .status = .running,
             .completed_steps = 0,
+            .run_id = try self.allocator.dupe(u8, run_id),
         };
         errdefer {
+            result.deinit(self.allocator);
             result.status = .failed;
             if (method_trace) |*trace| trace.finishError("WorkflowRunFailed", null, false);
             if (summary_trace) |*trace| trace.finishError(.system);
         }
 
-        for (workflow.steps) |step| {
-            switch (step) {
+        var next_step_index: usize = 0;
+        if (resume_from) |checkpoint| {
+            if (checkpoint.workflow_status == .succeeded or checkpoint.workflow_status == .failed) {
+                return error.WorkflowRunAlreadyTerminal;
+            }
+            if (!std.mem.eql(u8, checkpoint.workflow_id, workflow.id)) {
+                return error.WorkflowCheckpointMismatch;
+            }
+            if (checkpoint.step_statuses.len != workflow.steps.len) {
+                return error.WorkflowCheckpointMismatch;
+            }
+            @memcpy(step_statuses, checkpoint.step_statuses);
+            next_step_index = checkpoint.current_step_index;
+            result.status = checkpoint.workflow_status;
+            result.completed_steps = countCompletedSteps(step_statuses);
+            if (checkpoint.last_output_json) |value| result.last_output_json = try self.allocator.dupe(u8, value);
+            if (checkpoint.last_error_code) |value| result.last_error_code = try self.allocator.dupe(u8, value);
+        } else {
+            try self.emitEvent("workflow.started", workflow.id, null);
+            self.logInfo("workflow started", workflow.id, &.{
+                framework.LogField.int("step_count", @intCast(workflow.steps.len)),
+            });
+        }
+
+        try self.saveCheckpoint(.{
+            .run_id = try self.allocator.dupe(u8, run_id),
+            .workflow_id = try self.allocator.dupe(u8, workflow.id),
+            .workflow_status = .running,
+            .current_step_index = next_step_index,
+            .step_statuses = try self.allocator.dupe(state.WorkflowStepStatus, step_statuses),
+            .last_output_json = if (result.last_output_json) |value| try self.allocator.dupe(u8, value) else null,
+            .last_error_code = if (result.last_error_code) |value| try self.allocator.dupe(u8, value) else null,
+        });
+
+        var index = next_step_index;
+        while (index < workflow.steps.len) : (index += 1) {
+            step_statuses[index] = .running;
+            try self.saveCheckpoint(.{
+                .run_id = try self.allocator.dupe(u8, run_id),
+                .workflow_id = try self.allocator.dupe(u8, workflow.id),
+                .workflow_status = .running,
+                .current_step_index = index,
+                .step_statuses = try self.allocator.dupe(state.WorkflowStepStatus, step_statuses),
+                .last_output_json = if (result.last_output_json) |value| try self.allocator.dupe(u8, value) else null,
+                .last_error_code = if (result.last_error_code) |value| try self.allocator.dupe(u8, value) else null,
+            });
+
+            switch (workflow.steps[index]) {
                 .command => |command_step| {
                     const output = try self.executeCommand(command_step);
                     if (result.last_output_json) |value| self.allocator.free(value);
@@ -93,7 +156,18 @@ pub const WorkflowRunner = struct {
                     result.last_output_json = output;
                 },
             }
+
+            step_statuses[index] = .succeeded;
             result.completed_steps += 1;
+            try self.saveCheckpoint(.{
+                .run_id = try self.allocator.dupe(u8, run_id),
+                .workflow_id = try self.allocator.dupe(u8, workflow.id),
+                .workflow_status = .running,
+                .current_step_index = index + 1,
+                .step_statuses = try self.allocator.dupe(state.WorkflowStepStatus, step_statuses),
+                .last_output_json = if (result.last_output_json) |value| try self.allocator.dupe(u8, value) else null,
+                .last_error_code = if (result.last_error_code) |value| try self.allocator.dupe(u8, value) else null,
+            });
         }
 
         result.status = .succeeded;
@@ -101,9 +175,26 @@ pub const WorkflowRunner = struct {
         self.logInfo("workflow completed", workflow.id, &.{
             framework.LogField.int("completed_steps", @intCast(result.completed_steps)),
         });
+        try self.saveCheckpoint(.{
+            .run_id = try self.allocator.dupe(u8, run_id),
+            .workflow_id = try self.allocator.dupe(u8, workflow.id),
+            .workflow_status = .succeeded,
+            .current_step_index = workflow.steps.len,
+            .step_statuses = try self.allocator.dupe(state.WorkflowStepStatus, step_statuses),
+            .last_output_json = if (result.last_output_json) |value| try self.allocator.dupe(u8, value) else null,
+            .last_error_code = if (result.last_error_code) |value| try self.allocator.dupe(u8, value) else null,
+        });
+
         if (method_trace) |*trace| trace.finishSuccess(result.last_output_json orelse "", false);
         if (summary_trace) |*trace| trace.finishSuccess();
         return result;
+    }
+
+    pub fn resumeRun(self: *WorkflowRunner, workflow: definition.WorkflowDefinition, run_id: []const u8) !state.WorkflowRunResult {
+        const store = self.checkpoints orelse return error.WorkflowCheckpointStoreNotConfigured;
+        var checkpoint = (try store.load(self.allocator, run_id)) orelse return error.WorkflowCheckpointNotFound;
+        defer checkpoint.deinit(self.allocator);
+        return self.runWithCheckpoint(workflow, checkpoint.run_id, checkpoint);
     }
 
     pub fn submit(self: *WorkflowRunner, workflow: definition.WorkflowDefinition) !framework.TaskAccepted {
@@ -172,6 +263,19 @@ pub const WorkflowRunner = struct {
         return last_err;
     }
 
+    fn saveCheckpoint(self: *WorkflowRunner, checkpoint: state.WorkflowCheckpoint) !void {
+        const store = self.checkpoints orelse {
+            var mutable = checkpoint;
+            mutable.deinit(self.allocator);
+            return;
+        };
+        defer {
+            var mutable = checkpoint;
+            mutable.deinit(self.allocator);
+        }
+        try store.save(self.allocator, checkpoint);
+    }
+
     fn emitEvent(self: *WorkflowRunner, topic: []const u8, workflow_id: []const u8, error_code: ?[]const u8) !void {
         const bus = self.event_bus orelse return;
         const payload = if (error_code) |code|
@@ -187,6 +291,14 @@ pub const WorkflowRunner = struct {
         logger.child("workflow").child("runner").withField(framework.LogField.string("workflow_id", workflow_id)).info(message, fields);
     }
 };
+
+fn countCompletedSteps(step_statuses: []const state.WorkflowStepStatus) usize {
+    var count: usize = 0;
+    for (step_statuses) |item| {
+        if (item == .succeeded or item == .skipped) count += 1;
+    }
+    return count;
+}
 
 const WorkflowJobData = struct {
     runner: *WorkflowRunner,
@@ -216,9 +328,10 @@ const WorkflowJobData = struct {
         });
         defer result.deinit(allocator);
 
-        return std.fmt.allocPrint(allocator, "{{\"status\":{f},\"completed_steps\":{d}}}", .{
+        return std.fmt.allocPrint(allocator, "{{\"status\":{f},\"completed_steps\":{d},\"run_id\":{f}}}", .{
             std.json.fmt(result.status.asText(), .{}),
             result.completed_steps,
+            std.json.fmt(result.run_id orelse "", .{}),
         });
     }
 
@@ -249,6 +362,9 @@ test "workflow runner executes sequential steps successfully" {
     });
 
     var effects_runtime = effects.EffectsRuntime.init(.{});
+    const store_ref = checkpoint_store.MemoryCheckpointStore.init(std.testing.allocator);
+    defer store_ref.deinit();
+
     var runner = WorkflowRunner.init(
         std.testing.allocator,
         app_context.makeDispatcher(),
@@ -256,6 +372,7 @@ test "workflow runner executes sequential steps successfully" {
         app_context.logger,
         app_context.eventBus(),
         app_context.task_runner,
+        store_ref.asCheckpointStore(),
     );
 
     const steps = [_]step_types.WorkflowStep{
@@ -271,6 +388,154 @@ test "workflow runner executes sequential steps successfully" {
     try std.testing.expectEqual(state.WorkflowStatus.succeeded, result.status);
     try std.testing.expectEqual(@as(usize, 2), result.completed_steps);
     try std.testing.expectEqualStrings("{\"ok\":true}", result.last_output_json.?);
+    try std.testing.expect(result.run_id != null);
+}
+
+test "workflow runner saves checkpoint after step completion" {
+    const Demo = struct {
+        fn call(_: *const app.CommandContext) anyerror![]const u8 {
+            return std.testing.allocator.dupe(u8, "{\"saved\":true}");
+        }
+    };
+
+    var app_context = try runtime.AppContext.init(std.testing.allocator, .{
+        .console_log_enabled = false,
+    });
+    defer app_context.deinit();
+    try app_context.command_registry.register(.{
+        .id = "demo.checkpoint",
+        .method = "demo.checkpoint",
+        .handler = Demo.call,
+    });
+
+    var effects_runtime = effects.EffectsRuntime.init(.{});
+    const store_ref = checkpoint_store.MemoryCheckpointStore.init(std.testing.allocator);
+    defer store_ref.deinit();
+
+    var runner = WorkflowRunner.init(
+        std.testing.allocator,
+        app_context.makeDispatcher(),
+        &effects_runtime,
+        app_context.logger,
+        app_context.eventBus(),
+        app_context.task_runner,
+        store_ref.asCheckpointStore(),
+    );
+
+    const workflow = definition.WorkflowDefinition{
+        .id = "workflow.checkpoint",
+        .steps = &[_]step_types.WorkflowStep{
+            .{ .command = .{ .method = "demo.checkpoint" } },
+        },
+    };
+
+    var result = try runner.run(workflow);
+    defer result.deinit(std.testing.allocator);
+
+    var checkpoint = (try store_ref.load(std.testing.allocator, result.run_id.?)).?;
+    defer checkpoint.deinit(std.testing.allocator);
+    try std.testing.expectEqual(state.WorkflowStatus.succeeded, checkpoint.workflow_status);
+    try std.testing.expectEqual(@as(usize, 1), checkpoint.current_step_index);
+}
+
+test "workflow runner can resume from stored checkpoint" {
+    const Demo = struct {
+        var calls: usize = 0;
+
+        fn call(_: *const app.CommandContext) anyerror![]const u8 {
+            calls += 1;
+            return std.testing.allocator.dupe(u8, "{\"resumed\":true}");
+        }
+    };
+
+    var app_context = try runtime.AppContext.init(std.testing.allocator, .{
+        .console_log_enabled = false,
+    });
+    defer app_context.deinit();
+    try app_context.command_registry.register(.{
+        .id = "demo.resume",
+        .method = "demo.resume",
+        .handler = Demo.call,
+    });
+
+    var effects_runtime = effects.EffectsRuntime.init(.{});
+    const store_ref = checkpoint_store.MemoryCheckpointStore.init(std.testing.allocator);
+    defer store_ref.deinit();
+
+    var runner = WorkflowRunner.init(
+        std.testing.allocator,
+        app_context.makeDispatcher(),
+        &effects_runtime,
+        app_context.logger,
+        app_context.eventBus(),
+        app_context.task_runner,
+        store_ref.asCheckpointStore(),
+    );
+
+    const workflow = definition.WorkflowDefinition{
+        .id = "workflow.resume",
+        .steps = &[_]step_types.WorkflowStep{
+            .{ .command = .{ .method = "demo.resume" } },
+            .{ .command = .{ .method = "demo.resume" } },
+        },
+    };
+
+    var stored = state.WorkflowCheckpoint{
+        .run_id = try std.testing.allocator.dupe(u8, "resume_run_01"),
+        .workflow_id = try std.testing.allocator.dupe(u8, "workflow.resume"),
+        .workflow_status = .running,
+        .current_step_index = 1,
+        .step_statuses = try std.testing.allocator.dupe(state.WorkflowStepStatus, &[_]state.WorkflowStepStatus{ .succeeded, .pending }),
+        .last_output_json = try std.testing.allocator.dupe(u8, "{\"resumed\":true}"),
+    };
+    defer stored.deinit(std.testing.allocator);
+    try store_ref.save(stored);
+
+    Demo.calls = 0;
+    var result = try runner.resumeRun(workflow, "resume_run_01");
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(@as(usize, 1), Demo.calls);
+    try std.testing.expectEqual(state.WorkflowStatus.succeeded, result.status);
+    try std.testing.expectEqual(@as(usize, 2), result.completed_steps);
+}
+
+test "workflow runner cannot resume terminal checkpoint" {
+    var app_context = try runtime.AppContext.init(std.testing.allocator, .{
+        .console_log_enabled = false,
+    });
+    defer app_context.deinit();
+
+    var effects_runtime = effects.EffectsRuntime.init(.{});
+    const store_ref = checkpoint_store.MemoryCheckpointStore.init(std.testing.allocator);
+    defer store_ref.deinit();
+
+    var runner = WorkflowRunner.init(
+        std.testing.allocator,
+        app_context.makeDispatcher(),
+        &effects_runtime,
+        app_context.logger,
+        app_context.eventBus(),
+        app_context.task_runner,
+        store_ref.asCheckpointStore(),
+    );
+
+    var stored = state.WorkflowCheckpoint{
+        .run_id = try std.testing.allocator.dupe(u8, "terminal_run_01"),
+        .workflow_id = try std.testing.allocator.dupe(u8, "workflow.terminal"),
+        .workflow_status = .succeeded,
+        .current_step_index = 1,
+        .step_statuses = try std.testing.allocator.dupe(state.WorkflowStepStatus, &[_]state.WorkflowStepStatus{.succeeded}),
+    };
+    defer stored.deinit(std.testing.allocator);
+    try store_ref.save(stored);
+
+    try std.testing.expectError(error.WorkflowRunAlreadyTerminal, runner.resumeRun(.{
+        .id = "workflow.terminal",
+        .steps = &[_]step_types.WorkflowStep{
+            .{ .emit_event = .{ .topic = "noop", .payload_json = "{}" } },
+        },
+    }, "terminal_run_01"));
 }
 
 test "workflow runner retries and succeeds" {
@@ -301,6 +566,7 @@ test "workflow runner retries and succeeds" {
         app_context.logger,
         app_context.eventBus(),
         app_context.task_runner,
+        null,
     );
 
     const steps = [_]step_types.WorkflowStep{
@@ -338,6 +604,7 @@ test "workflow runner retry fails after budget" {
         app_context.logger,
         app_context.eventBus(),
         app_context.task_runner,
+        null,
     );
 
     const shell_args = switch (builtin.os.tag) {
@@ -383,6 +650,7 @@ test "workflow runner can submit async workflow task" {
         app_context.logger,
         app_context.eventBus(),
         app_context.task_runner,
+        null,
     );
 
     const steps = [_]step_types.WorkflowStep{

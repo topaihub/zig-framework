@@ -65,9 +65,9 @@ Batch A 明确不做：
 
 ### 4.1 状态模型
 
-- [ ] 4.1.1 扩展 [`src/workflow/state.zig`](E:/vscode/fuckcode-dev/framework/src/workflow/state.zig)，新增 `WorkflowStepStatus`
-- [ ] 4.1.2 扩展 [`src/workflow/state.zig`](E:/vscode/fuckcode-dev/framework/src/workflow/state.zig)，定义 `WorkflowCheckpoint`
-- [ ] 4.1.3 让 `WorkflowCheckpoint` 至少包含：
+- [x] 4.1.1 扩展 [`src/workflow/state.zig`](E:/vscode/fuckcode-dev/framework/src/workflow/state.zig)，新增 `WorkflowStepStatus`
+- [x] 4.1.2 扩展 [`src/workflow/state.zig`](E:/vscode/fuckcode-dev/framework/src/workflow/state.zig)，定义 `WorkflowCheckpoint`
+- [x] 4.1.3 让 `WorkflowCheckpoint` 至少包含：
   - `run_id`
   - `workflow_id`
   - `workflow_status`
@@ -76,52 +76,52 @@ Batch A 明确不做：
   - `last_output_json`
   - `last_error_code`
   - `waiting_reason`
-- [ ] 4.1.4 为新的 state 类型补齐 clone / deinit / stable text helper
+- [x] 4.1.4 为新的 state 类型补齐 clone / deinit / stable text helper
 
 ### 4.2 Checkpoint Store
 
-- [ ] 4.2.1 新建 [`src/workflow/checkpoint_store.zig`](E:/vscode/fuckcode-dev/framework/src/workflow/checkpoint_store.zig)
-- [ ] 4.2.2 定义 `WorkflowCheckpointStore` 抽象接口
-- [ ] 4.2.3 先实现一个 `MemoryCheckpointStore`
+- [x] 4.2.1 新建 [`src/workflow/checkpoint_store.zig`](E:/vscode/fuckcode-dev/framework/src/workflow/checkpoint_store.zig)
+- [x] 4.2.2 定义 `WorkflowCheckpointStore` 抽象接口
+- [x] 4.2.3 先实现一个 `MemoryCheckpointStore`
 - [ ] 4.2.4 可选实现一个最小 `FileCheckpointStore`，如果不做文件版，要在文档里说明留待 Batch B
-- [ ] 4.2.5 为 checkpoint store 补齐测试：save / load / update / missing run id
+- [x] 4.2.5 为 checkpoint store 补齐测试：save / load / update / missing run id
 
 ### 4.3 WorkflowRunner 挂接
 
-- [ ] 4.3.1 扩展 [`src/workflow/runner.zig`](E:/vscode/fuckcode-dev/framework/src/workflow/runner.zig)，让 `WorkflowRunner` 依赖可选 `checkpoint_store`
-- [ ] 4.3.2 为 `WorkflowRunner` 新增 `runWithCheckpoint(...)`
-- [ ] 4.3.3 在每个 step 完成后保存 checkpoint
-- [ ] 4.3.4 在 run 终态时保存 terminal checkpoint
-- [ ] 4.3.5 新增 `resume(run_id)` 或等价入口
-- [ ] 4.3.6 `resume` 只要求从“下一个未完成 step”继续，不要求复杂 replay
+- [x] 4.3.1 扩展 [`src/workflow/runner.zig`](E:/vscode/fuckcode-dev/framework/src/workflow/runner.zig)，让 `WorkflowRunner` 依赖可选 `checkpoint_store`
+- [x] 4.3.2 为 `WorkflowRunner` 新增 `runWithCheckpoint(...)`
+- [x] 4.3.3 在每个 step 完成后保存 checkpoint
+- [x] 4.3.4 在 run 终态时保存 terminal checkpoint
+- [x] 4.3.5 新增 `resume(run_id)` 或等价入口
+- [x] 4.3.6 `resume` 只要求从“下一个未完成 step”继续，不要求复杂 replay
 
 ### 4.4 Run ID 与 Resume 语义
 
-- [ ] 4.4.1 明确 `run_id` 的生成策略
-- [ ] 4.4.2 确定 `workflow_id` 与 `run_id` 的关系
-- [ ] 4.4.3 明确恢复语义：
+- [x] 4.4.1 明确 `run_id` 的生成策略
+- [x] 4.4.2 确定 `workflow_id` 与 `run_id` 的关系
+- [x] 4.4.3 明确恢复语义：
   - 已完成 step 不重跑
   - 当前 step 失败后允许再次进入
   - terminal run 不允许 resume
-- [ ] 4.4.4 把这些语义写进 [`workflow.md`](E:/vscode/fuckcode-dev/framework/docs/architecture/workflow.md) 或新的 phase 2 workflow 文档
+- [x] 4.4.4 把这些语义写进 [`workflow.md`](E:/vscode/fuckcode-dev/framework/docs/architecture/workflow.md) 或新的 phase 2 workflow 文档
 
 ### 4.5 测试
 
-- [ ] 4.5.1 为 `state.zig` 新增 checkpoint state 测试
-- [ ] 4.5.2 为 `checkpoint_store.zig` 新增 save/load/update 测试
-- [ ] 4.5.3 为 [`src/workflow/runner.zig`](E:/vscode/fuckcode-dev/framework/src/workflow/runner.zig) 新增“顺序执行时生成 checkpoint”测试
-- [ ] 4.5.4 为 [`src/workflow/runner.zig`](E:/vscode/fuckcode-dev/framework/src/workflow/runner.zig) 新增“从 checkpoint 恢复继续执行”测试
-- [ ] 4.5.5 为 [`src/workflow/runner.zig`](E:/vscode/fuckcode-dev/framework/src/workflow/runner.zig) 新增“terminal run 无法 resume”测试
+- [x] 4.5.1 为 `state.zig` 新增 checkpoint state 测试
+- [x] 4.5.2 为 `checkpoint_store.zig` 新增 save/load/update 测试
+- [x] 4.5.3 为 [`src/workflow/runner.zig`](E:/vscode/fuckcode-dev/framework/src/workflow/runner.zig) 新增“顺序执行时生成 checkpoint”测试
+- [x] 4.5.4 为 [`src/workflow/runner.zig`](E:/vscode/fuckcode-dev/framework/src/workflow/runner.zig) 新增“从 checkpoint 恢复继续执行”测试
+- [x] 4.5.5 为 [`src/workflow/runner.zig`](E:/vscode/fuckcode-dev/framework/src/workflow/runner.zig) 新增“terminal run 无法 resume”测试
 
 ### 4.6 示例与文档
 
-- [ ] 4.6.1 新增一个 workflow checkpoint example
-- [ ] 4.6.2 让 example 明确展示：
+- [x] 4.6.1 新增一个 workflow checkpoint example
+- [x] 4.6.2 让 example 明确展示：
   - 第一次执行
   - 读取 checkpoint
   - 恢复执行
-- [ ] 4.6.3 在 [`examples/README.md`](E:/vscode/fuckcode-dev/framework/examples/README.md) 增加该示例说明
-- [ ] 4.6.4 在 [`workflow.md`](E:/vscode/fuckcode-dev/framework/docs/architecture/workflow.md) 补 phase 2 checkpoint/resume 小节
+- [x] 4.6.3 在 [`examples/README.md`](E:/vscode/fuckcode-dev/framework/examples/README.md) 增加该示例说明
+- [x] 4.6.4 在 [`workflow.md`](E:/vscode/fuckcode-dev/framework/docs/architecture/workflow.md) 补 phase 2 checkpoint/resume 小节
 
 ## 5. 建议的施工顺序
 
@@ -140,9 +140,9 @@ Batch A 明确不做：
 
 当下面条件都满足时，可认为 Batch A 完成：
 
-- [ ] `WorkflowCheckpoint` 类型稳定存在
-- [ ] `MemoryCheckpointStore` 可用
-- [ ] `WorkflowRunner` 能保存 checkpoint
-- [ ] `WorkflowRunner` 能从 checkpoint 恢复
-- [ ] tests 覆盖 save/load/resume/terminal guard
-- [ ] 至少 1 个 checkpoint example 可运行
+- [x] `WorkflowCheckpoint` 类型稳定存在
+- [x] `MemoryCheckpointStore` 可用
+- [x] `WorkflowRunner` 能保存 checkpoint
+- [x] `WorkflowRunner` 能从 checkpoint 恢复
+- [x] tests 覆盖 save/load/resume/terminal guard
+- [x] 至少 1 个 checkpoint example 可运行

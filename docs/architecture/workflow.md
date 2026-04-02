@@ -43,16 +43,39 @@
 当前仍未实现：
 
 - 完整 DSL
-- checkpoint / resume
 - persistent workflow state
 - parallel fan-out
 
 这些属于后续阶段。
 
-## 5. 当前价值
+## 5. Phase 2 Batch A 已落能力
+
+当前 phase 2 Batch A 已经补上：
+
+- `WorkflowStepStatus`
+- `WorkflowCheckpoint`
+- `WorkflowCheckpointStore`
+- `MemoryCheckpointStore`
+- `WorkflowRunner.runWithCheckpoint(...)`
+- `WorkflowRunner.resumeRun(...)`
+
+当前恢复语义是：
+
+- 从“下一个未完成 step”继续
+- 已完成 step 不重跑
+- terminal run 不允许 resume
+
+需要特别说明：
+
+- 当前 `MemoryCheckpointStore` 的目标是把 checkpoint / resume API 与状态模型定型
+- 它不等于 durable file-backed persistence 已完整完成
+- durable file-backed checkpoint 仍属于后续批次
+
+## 6. 当前价值
 
 虽然还是最小版，但它已经证明：
 
 - workflow 不是纯文档抽象
 - 它已经能接上 logger / event bus / task runner
+- 它已经开始具备最小可恢复状态
 - 后续完全可以作为 `ourclaw` 的 deterministic command pipeline substrate

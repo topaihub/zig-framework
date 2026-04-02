@@ -16,6 +16,7 @@
 - `logging_multi_sink_demo.zig`
 - `tooling_observability_demo.zig`
 - `workflow_observability_demo.zig`
+- `workflow_checkpoint_demo.zig`
 - `repo_health_check_demo.zig`
 - `script_markdown_fetch_demo.zig`
 - `business_services_demo.zig`
@@ -31,6 +32,7 @@
 - `logging_multi_sink_demo.zig`
 - `tooling_observability_demo.zig`
 - `workflow_observability_demo.zig`
+- `workflow_checkpoint_demo.zig`
 
 ### app integration demo
 
@@ -74,3 +76,17 @@ zig build test
 - 使用 `ToolingRuntime` 作为 shared substrate
 - 通过 `ExampleServices` 把项目自己的依赖束挂到 `CommandContext.user_data`
 - 让 command handler 只依赖 `CommandContext + ServicesFacade`
+
+## workflow-checkpoint-demo
+
+`workflow_checkpoint_demo.zig` 演示了 workflow phase 2 Batch A 的最小闭环：
+
+- 使用 `MemoryCheckpointStore`
+- 运行一个最小 workflow
+- 读取保存后的 checkpoint
+- 展示 `run_id` 和 terminal status
+
+它的目的不是展示完整恢复系统，而是说明：
+
+- checkpoint / resume 的 API 已经成型
+- `WorkflowRunner` 不再只是一次性执行器
