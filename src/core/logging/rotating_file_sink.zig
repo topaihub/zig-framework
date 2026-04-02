@@ -124,6 +124,16 @@ pub const RotatingFileSink = struct {
                 }
                 // Message
                 std.fmt.format(w, " {s}", .{rec.message}) catch {};
+                // Trace context
+                if (rec.trace_id) |tid| {
+                    std.fmt.format(w, " trace_id={s}", .{tid}) catch {};
+                }
+                if (rec.request_id) |rid| {
+                    std.fmt.format(w, " request_id={s}", .{rid}) catch {};
+                }
+                if (rec.span_id) |sid| {
+                    std.fmt.format(w, " span_id={s}", .{sid}) catch {};
+                }
                 // Fields
                 for (rec.fields) |field| {
                     std.fmt.format(w, " {s}=", .{field.key}) catch {};
