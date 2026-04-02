@@ -22,38 +22,38 @@
 
 ## 2. Phase 2 基线
 
-- [ ] 2.1 发布 phase 2 requirements / design / tasks 文档
-- [ ] 2.2 在 `framework/docs/README.md` 中加入 phase 2 阅读入口
+- [x] 2.1 发布 phase 2 requirements / design / tasks 文档
+- [x] 2.2 在 `framework/docs/README.md` 中加入 phase 2 阅读入口
 - [ ] 2.3 在 implementation guide 中补 phase 2 的边界约束摘要
 
 ## 3. Workflow Hardening
 
-- [ ] 3.1 为 `src/workflow/step_types.zig` 增加 `branch` step
-- [ ] 3.2 为 `src/workflow/step_types.zig` 增加 `parallel` step
-- [ ] 3.3 为 `src/workflow/step_types.zig` 增加 `wait_event` step
-- [ ] 3.4 为 `src/workflow/step_types.zig` 增加 `ask_permission` step
-- [ ] 3.5 为 `src/workflow/step_types.zig` 增加 `ask_question` step
-- [ ] 3.6 新建 `src/workflow/checkpoint_store.zig`
-- [ ] 3.7 扩展 `src/workflow/state.zig`，记录 run id / step status / waiting reason / terminal result
-- [ ] 3.8 扩展 `src/workflow/runner.zig`，支持 checkpoint 保存
-- [ ] 3.9 扩展 `src/workflow/runner.zig`，支持 resume from checkpoint
-- [ ] 3.10 为 workflow hardening 补齐测试：branch / parallel / wait_event / checkpoint / resume
+- [x] 3.1 为 `src/workflow/step_types.zig` 增加 `branch` step
+- [x] 3.2 为 `src/workflow/step_types.zig` 增加 `parallel` step
+- [x] 3.3 为 `src/workflow/step_types.zig` 增加 `wait_event` step
+- [x] 3.4 为 `src/workflow/step_types.zig` 增加 `ask_permission` step
+- [x] 3.5 为 `src/workflow/step_types.zig` 增加 `ask_question` step
+- [x] 3.6 新建 `src/workflow/checkpoint_store.zig`
+- [x] 3.7 扩展 `src/workflow/state.zig`，记录 run id / step status / waiting reason / terminal result
+- [x] 3.8 扩展 `src/workflow/runner.zig`，支持 checkpoint 保存
+- [x] 3.9 扩展 `src/workflow/runner.zig`，支持 resume from checkpoint
+- [x] 3.10 为 workflow hardening 补齐测试：branch / parallel / wait_event / checkpoint / resume
 
 ## 4. Workflow 示例与验证
 
-- [ ] 4.1 新增一个多 step workflow 示例，覆盖 `command + retry + branch`
-- [ ] 4.2 新增一个 checkpoint/resume 示例
+- [x] 4.1 新增一个多 step workflow 示例，覆盖 `command + retry + branch`
+- [x] 4.2 新增一个 checkpoint/resume 示例
 - [ ] 4.3 新增一个 human-in-the-loop 示例，覆盖 `ask_permission` 或 `ask_question`
-- [ ] 4.4 为这些示例补 README 说明
+- [x] 4.4 为这些示例补 README 说明
 
 ## 5. Tooling Adapter Expansion
 
-- [ ] 5.1 在 `src/tooling/adapters/` 新建 `stdio_surface.zig`
-- [ ] 5.2 定义 stdio request / response contract
-- [ ] 5.3 支持通过 stdio 执行 native tool
-- [ ] 5.4 支持通过 stdio 执行 script-backed tool
-- [ ] 5.5 支持通过 stdio 执行 workflow-backed tool
-- [ ] 5.6 为 `stdio_surface` 补齐测试：success / invalid request / invalid output / timeout
+- [x] 5.1 在 `src/tooling/adapters/` 新建 `stdio_surface.zig`
+- [x] 5.2 定义 stdio request / response contract
+- [x] 5.3 支持通过 stdio 执行 native tool
+- [x] 5.4 支持通过 stdio 执行 script-backed tool
+- [x] 5.5 支持通过 stdio 执行 workflow-backed tool
+- [x] 5.6 为 `stdio_surface` 补齐测试：success / invalid request / invalid output / timeout
 - [ ] 5.7 视实施情况评估是否补 `http_surface.zig` 最小版本
 
 ## 6. Tool Packaging And Templates
@@ -66,12 +66,12 @@
 
 ## 7. AgentKit 最小可用层
 
-- [ ] 7.1 明确 `agentkit` 的公开 root 导出面
-- [ ] 7.2 提炼 provider/model/health/catalog 的共用契约到 `agentkit`
-- [ ] 7.3 增加 provider readiness / selection helper
+- [x] 7.1 明确 `agentkit` 的公开 root 导出面
+- [x] 7.2 提炼 provider/model/health/catalog 的共用契约到 `agentkit`
+- [x] 7.3 增加 provider readiness / selection helper
 - [ ] 7.4 增加 agent-oriented execution metadata 契约
-- [ ] 7.5 为 `agentkit` 补一组不依赖 `zig-opencode` 产品语义的测试
-- [ ] 7.6 写一份 `agentkit` 边界文档，明确它不包含 session/prompt/chat 主链
+- [x] 7.5 为 `agentkit` 补一组不依赖 `zig-opencode` 产品语义的测试
+- [x] 7.6 写一份 `agentkit` 边界文档，明确它不包含 session/prompt/chat 主链
 
 ## 8. ServiceKit 最小可用层
 
@@ -84,9 +84,9 @@
 
 ## 9. Consumer Integration 第二批切片
 
-- [ ] 9.1 为 `zig-opencode` 选择一个 workflow-backed deterministic slice 作为 phase 2 消费验证
-- [ ] 9.2 在 `zig-opencode` 中接入 phase 2 workflow 能力
-- [ ] 9.3 为 `zig-opencode` 的新接入补 smoke test
+- [x] 9.1 为 `zig-opencode` 选择一个第二批 deterministic slice 作为 phase 2 消费验证
+- [x] 9.2 在 `zig-opencode` 中接入 phase 2 `agentkit` 选择能力
+- [x] 9.3 为 `zig-opencode` 的新接入补 smoke test
 - [ ] 9.4 为 `ourclaw` 选择一个 servicekit/workflow-backed slice 作为 phase 2 消费验证
 - [ ] 9.5 在 `ourclaw` 中接入 phase 2 servicekit/workflow 能力
 - [ ] 9.6 为 `ourclaw` 的新接入补 smoke test
@@ -101,9 +101,9 @@
 
 ## 11. Final Verification
 
-- [ ] 11.1 运行 framework 全量 `zig build test`
-- [ ] 11.2 运行至少一个 workflow checkpoint/resume 场景
-- [ ] 11.3 运行至少一个 stdio adapter 场景
-- [ ] 11.4 完成 `zig-opencode` phase 2 消费验证
+- [x] 11.1 运行 framework 全量 `zig build test`
+- [x] 11.2 运行至少一个 workflow checkpoint/resume 场景
+- [x] 11.3 运行至少一个 stdio adapter 场景
+- [x] 11.4 完成 `zig-opencode` phase 2 消费验证
 - [ ] 11.5 完成 `ourclaw` phase 2 消费验证
 - [ ] 11.6 回填 phase 2 任务状态和边界结论文档

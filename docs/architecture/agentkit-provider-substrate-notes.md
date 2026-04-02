@@ -8,10 +8,14 @@
 
 当前阶段，`agentkit` 先承载：
 
+- `ModelRef`
+- `ProviderAuthKind`
 - `ProviderDefinition`
 - `ProviderHealth`
 - `ProviderModelInfo`
+- `ProviderCatalogEntry`
 - 最小 `ProviderRegistry`
+- provider readiness / selection helper
 
 不直接承载：
 
@@ -40,7 +44,39 @@
 2. 一旦直接下沉 chat/runtime 语义，`framework` 很容易过快产品化
 3. 当前更优先的仍是 `tooling / workflow / service bundle`
 
-## 5. 下一步建议
+## 5. 当前已落地结果
+
+当前 `agentkit` 已经从“只有占位类型”推进到一层最小可用 provider substrate：
+
+- `ModelRef`
+- `ProviderAuthKind`
+- `ProviderDefinition`
+- `ProviderHealth`
+- `ProviderModelInfo`
+- `ProviderCatalogEntry`
+- `ProviderRegistry`
+- `isProviderReady(...)`
+- `isModelReady(...)`
+- `defaultReadyModel(...)`
+
+并且这层能力已经被 `zig-opencode` 的 category model selection 路径消费。
+
+也就是说，`agentkit` 现在已经开始承担：
+
+- provider catalog 的共享契约
+- provider readiness / default-model selection 的共享逻辑
+
+## 6. 仍未进入 agentkit 的内容
+
+当前仍明确不进入 `agentkit`：
+
+- provider concrete HTTP runtime
+- streaming protocol 实现
+- session runtime
+- prompt assembly
+- category 产品策略本体
+
+## 7. 下一步建议
 
 等到：
 

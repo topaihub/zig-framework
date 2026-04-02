@@ -186,7 +186,11 @@ pub const ProviderDefinition = agentkit.ProviderDefinition;
 pub const ProviderHealth = agentkit.ProviderHealth;
 pub const ProviderHealthState = agentkit.ProviderHealthState;
 pub const ProviderModelInfo = agentkit.ProviderModelInfo;
+pub const ProviderCatalogEntry = agentkit.ProviderCatalogEntry;
 pub const AgentkitProviderRegistry = agentkit.ProviderRegistry;
+pub const agentkitIsProviderReady = agentkit.isProviderReady;
+pub const agentkitIsModelReady = agentkit.isModelReady;
+pub const agentkitDefaultReadyModel = agentkit.defaultReadyModel;
 
 test {
     std.testing.refAllDecls(@This());

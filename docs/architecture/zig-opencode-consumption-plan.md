@@ -89,3 +89,20 @@
 
 - 不把 `framework` command surface 直接混进 `zig-opencode`
 - 不把 provider runtime、session runtime、prompt assembly 下沉到 `framework`
+
+## 7. Phase 2B 已实现切片
+
+当前已经完成一个 phase 2B 的第二批接入：
+
+- `framework/agentkit` 提供 provider catalog / readiness / selection helper
+- `zig-opencode` 的 category resolver 通过 bridge 消费这些 helper
+
+这次接入验证了：
+
+- `agentkit` 已经不只是占位层，而能承载共享 provider substrate
+- `zig-opencode` 可以消费 `framework` 的 agent-oriented中层，而不是继续把 provider selection 逻辑完全留在 app 内
+
+这次接入仍然没有做的事：
+
+- 不把 provider concrete runtime 搬进 `framework`
+- 不把 session runtime、prompt assembly、chat timeline 下沉到 `framework`

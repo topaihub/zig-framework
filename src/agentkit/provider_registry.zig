@@ -4,6 +4,7 @@ const provider_types = @import("provider_types.zig");
 pub const ProviderDefinition = provider_types.ProviderDefinition;
 pub const ProviderHealth = provider_types.ProviderHealth;
 pub const ProviderModelInfo = provider_types.ProviderModelInfo;
+pub const ProviderCatalogEntry = provider_types.ProviderCatalogEntry;
 
 pub const ProviderRegistry = struct {
     allocator: std.mem.Allocator,
@@ -14,12 +15,13 @@ pub const ProviderRegistry = struct {
     }
 
     pub fn deinit(self: *ProviderRegistry) void {
+        for (self.definitions.items) |*item| item.deinit(self.allocator);
         self.definitions.deinit(self.allocator);
     }
 
     pub fn register(self: *ProviderRegistry, definition: ProviderDefinition) !void {
         if (self.find(definition.id) != null) return error.DuplicateProviderId;
-        try self.definitions.append(self.allocator, definition);
+        try self.definitions.append(self.allocator, try definition.clone(self.allocator));
     }
 
     pub fn find(self: *const ProviderRegistry, id: []const u8) ?ProviderDefinition {
@@ -45,7 +47,11 @@ test "provider registry supports register find and duplicate detection" {
     try registry.register(.{
         .id = "openai",
         .label = "OpenAI",
-        .default_model = "gpt-4o-mini",
+        .default_model = .{
+            .provider_id = "openai",
+            .model_id = "gpt-5",
+        },
+        .auth_kind = .api_key,
         .supports_streaming = true,
     });
 
@@ -54,6 +60,9 @@ test "provider registry supports register find and duplicate detection" {
     try std.testing.expectError(error.DuplicateProviderId, registry.register(.{
         .id = "openai",
         .label = "Duplicate OpenAI",
-        .default_model = "gpt-4o-mini",
+        .default_model = .{
+            .provider_id = "openai",
+            .model_id = "gpt-5",
+        },
     }));
 }
