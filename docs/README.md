@@ -26,6 +26,9 @@
 - `framework/docs/architecture/agent-tooling-runtime-direction.md`
 - `framework/docs/architecture/agent-tooling-runtime-vnext-module-design.md`
 - `framework/docs/architecture/agent-tooling-runtime-phase1-roadmap.md`
+- `framework/docs/architecture/agent-tooling-runtime-phase2-requirements.md`
+- `framework/docs/architecture/agent-tooling-runtime-phase2-design.md`
+- `framework/docs/architecture/agent-tooling-runtime-phase2-tasks.md`
 - `framework/docs/architecture/framework-positioning-for-zig-opencode-and-ourclaw.md`
 - `framework/docs/architecture/nullclaw-and-ourclaw-extraction-strategy.md`
 - `framework/docs/development/win11-dev-workstation.md`
@@ -58,16 +61,19 @@
 3. `framework/docs/architecture/agent-tooling-runtime-direction.md`
 4. `framework/docs/architecture/agent-tooling-runtime-vnext-module-design.md`
 5. `framework/docs/architecture/agent-tooling-runtime-phase1-roadmap.md`
-6. `framework/docs/architecture/framework-positioning-for-zig-opencode-and-ourclaw.md`
-7. `framework/docs/architecture/nullclaw-and-ourclaw-extraction-strategy.md`
-8. `framework/docs/architecture/implementation-guardrails.md`
-9. `framework/docs/architecture/implementation-guide.md`
-10. `framework/docs/architecture/effects.md`
-11. `framework/docs/architecture/tooling.md`
-12. `framework/docs/architecture/workflow.md`
-13. `framework/docs/architecture/script-contract.md`
-14. `framework/docs/architecture/framework-consumer-integration-phase1-requirements.md`
-15. `framework/docs/architecture/framework-consumer-integration-phase1-design.md`
-16. `framework/docs/architecture/framework-consumer-integration-phase1-tasks.md`
+6. `framework/docs/architecture/agent-tooling-runtime-phase2-requirements.md`
+7. `framework/docs/architecture/agent-tooling-runtime-phase2-design.md`
+8. `framework/docs/architecture/agent-tooling-runtime-phase2-tasks.md`
+9. `framework/docs/architecture/framework-positioning-for-zig-opencode-and-ourclaw.md`
+10. `framework/docs/architecture/nullclaw-and-ourclaw-extraction-strategy.md`
+11. `framework/docs/architecture/implementation-guardrails.md`
+12. `framework/docs/architecture/implementation-guide.md`
+13. `framework/docs/architecture/effects.md`
+14. `framework/docs/architecture/tooling.md`
+15. `framework/docs/architecture/workflow.md`
+16. `framework/docs/architecture/script-contract.md`
+17. `framework/docs/architecture/framework-consumer-integration-phase1-requirements.md`
+18. `framework/docs/architecture/framework-consumer-integration-phase1-design.md`
+19. `framework/docs/architecture/framework-consumer-integration-phase1-tasks.md`
 
 如果你想知道“ourclaw 怎样使用这些能力”，再读 `ourclaw/docs/architecture/`。
