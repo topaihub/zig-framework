@@ -27,6 +27,11 @@
 - `shell`
 - `emit_event`
 - `retry`
+- `branch`
+- `parallel`
+- `wait_event`
+- `ask_permission`
+- `ask_question`
 
 ## 3. 与 tooling 的关系
 
@@ -71,11 +76,44 @@
 - 它不等于 durable file-backed persistence 已完整完成
 - durable file-backed checkpoint 仍属于后续批次
 
-## 6. 当前价值
+## 6. Phase 2 Batch B 已落能力
+
+当前 phase 2 Batch B 已经补上最小控制流能力：
+
+- `branch`
+- `parallel`
+- `wait_event`
+- `ask_permission`
+- `ask_question`
+
+当前语义是：
+
+- `branch`
+  - 基于前一步 `last_output_json` 做条件判断
+  - 在当前 step 内执行 `on_true / on_false` 目标
+- `parallel`
+  - 支持受限 target fan-out
+  - 在有 `TaskRunner` 时可并发执行
+- `wait_event`
+  - 无匹配事件时进入 `waiting`
+  - 恢复后继续用保存的 cursor 查找新事件
+- `ask_permission` / `ask_question`
+  - 通过可注入 handler 驱动
+  - `pending` 时进入 `waiting`
+
+需要明确的是：
+
+- 这仍然不是完整 DSL
+- `branch` 目前不是 arbitrary jump 机制
+- `parallel` 目前是受限 target 集合，而不是通用 DAG
+- `ask_permission` / `ask_question` 当前依赖注入 handler，而不是完整产品 runtime
+
+## 7. 当前价值
 
 虽然还是最小版，但它已经证明：
 
 - workflow 不是纯文档抽象
 - 它已经能接上 logger / event bus / task runner
 - 它已经开始具备最小可恢复状态
+- 它已经开始具备最小控制流与 human-in-the-loop 能力
 - 后续完全可以作为 `ourclaw` 的 deterministic command pipeline substrate

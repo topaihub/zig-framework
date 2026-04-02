@@ -21,6 +21,7 @@ pub const WorkflowStatus = enum {
 pub const WorkflowStepStatus = enum {
     pending,
     running,
+    waiting,
     succeeded,
     failed,
     skipped,
@@ -29,6 +30,7 @@ pub const WorkflowStepStatus = enum {
         return switch (self) {
             .pending => "pending",
             .running => "running",
+            .waiting => "waiting",
             .succeeded => "succeeded",
             .failed => "failed",
             .skipped => "skipped",
@@ -91,6 +93,7 @@ test "workflow statuses expose stable text values" {
     try std.testing.expectEqualStrings("idle", WorkflowStatus.idle.asText());
     try std.testing.expectEqualStrings("waiting", WorkflowStatus.waiting.asText());
     try std.testing.expectEqualStrings("pending", WorkflowStepStatus.pending.asText());
+    try std.testing.expectEqualStrings("waiting", WorkflowStepStatus.waiting.asText());
     try std.testing.expectEqualStrings("skipped", WorkflowStepStatus.skipped.asText());
 }
 

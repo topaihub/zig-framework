@@ -44,16 +44,16 @@
 
 ## 3. Workflow Hardening
 
-- [ ] 3.1 为 `src/workflow/step_types.zig` 增加 `branch` step
-- [ ] 3.2 为 `src/workflow/step_types.zig` 增加 `parallel` step
-- [ ] 3.3 为 `src/workflow/step_types.zig` 增加 `wait_event` step
-- [ ] 3.4 为 `src/workflow/step_types.zig` 增加 `ask_permission` step
-- [ ] 3.5 为 `src/workflow/step_types.zig` 增加 `ask_question` step
+- [x] 3.1 为 `src/workflow/step_types.zig` 增加 `branch` step
+- [x] 3.2 为 `src/workflow/step_types.zig` 增加 `parallel` step
+- [x] 3.3 为 `src/workflow/step_types.zig` 增加 `wait_event` step
+- [x] 3.4 为 `src/workflow/step_types.zig` 增加 `ask_permission` step
+- [x] 3.5 为 `src/workflow/step_types.zig` 增加 `ask_question` step
 - [ ] 3.6 新建 `src/workflow/checkpoint_store.zig`
 - [ ] 3.7 扩展 `src/workflow/state.zig`，记录 run id / step status / waiting reason / terminal result
 - [ ] 3.8 扩展 `src/workflow/runner.zig`，支持 checkpoint 保存
 - [ ] 3.9 扩展 `src/workflow/runner.zig`，支持 resume from checkpoint
-- [ ] 3.10 为 workflow hardening 补齐测试：branch / parallel / wait_event / checkpoint / resume
+- [x] 3.10 为 workflow hardening 补齐测试：branch / parallel / wait_event / checkpoint / resume
 
 ## 4. Workflow 示例与验证
 
