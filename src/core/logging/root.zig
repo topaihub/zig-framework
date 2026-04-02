@@ -34,6 +34,7 @@ pub const RedactMode = redact.RedactMode;
 pub const RotatingFileSink = rotating_file_sink.RotatingFileSink;
 pub const RotatingFileSinkConfig = rotating_file_sink.RotatingFileSinkConfig;
 pub const RotatingFileSinkStatus = rotating_file_sink.RotatingFileSinkStatus;
+pub const LogFormat = rotating_file_sink.LogFormat;
 pub const Logger = logger.Logger;
 pub const LoggerTruncationStats = logger.LoggerTruncationStats;
 pub const LoggerOptions = logger.LoggerOptions;

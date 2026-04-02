@@ -5,6 +5,13 @@ const sink_model = @import("sink.zig");
 pub const LogRecord = record_model.LogRecord;
 pub const LogSink = sink_model.LogSink;
 
+pub const LogFormat = enum {
+    /// Human-readable: "2026-04-02 23:00:00 INFO server: message key=value"
+    text,
+    /// Machine-readable: {"ts":1712016000,"level":"info","message":"..."}
+    json,
+};
+
 pub const RotatingFileSinkConfig = struct {
     /// Directory for log files (created if missing).
     log_dir: []const u8 = "logs",
@@ -12,6 +19,8 @@ pub const RotatingFileSinkConfig = struct {
     prefix: []const u8 = "app",
     /// Max bytes per file before rotating. Default 100 MB.
     max_file_bytes: u64 = 100 * 1024 * 1024,
+    /// Output format.
+    format: LogFormat = .text,
 };
 
 pub const RotatingFileSink = struct {
@@ -82,13 +91,52 @@ pub const RotatingFileSink = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        // Render JSONL
+        // Render log line
         var buf: std.ArrayListUnmanaged(u8) = .empty;
         defer buf.deinit(self.allocator);
-        rec.writeJson(buf.writer(self.allocator)) catch {
-            self.dropped_records += 1;
-            return;
-        };
+
+        switch (self.config.format) {
+            .json => {
+                rec.writeJson(buf.writer(self.allocator)) catch {
+                    self.dropped_records += 1;
+                    return;
+                };
+            },
+            .text => {
+                // Format: YYYY-MM-DD HH:MM:SS LEVEL subsystem: message key=value
+                const w = buf.writer(self.allocator);
+                // Timestamp
+                const ts_secs: u64 = @intCast(if (rec.ts_unix_ms > 0) @divTrunc(rec.ts_unix_ms, 1000) else 0);
+                const ts_rem: u64 = @intCast(if (rec.ts_unix_ms > 0) @rem(rec.ts_unix_ms, 1000) else 0);
+                var d_buf: [10]u8 = undefined;
+                epochToDate(ts_secs, &d_buf);
+                const sod = @rem(ts_secs, 86400);
+                const hh = sod / 3600;
+                const mm = @rem(sod, 3600) / 60;
+                const ss = @rem(sod, 60);
+                std.fmt.format(w, "{s} {d:0>2}:{d:0>2}:{d:0>2}.{d:0>3} {s}", .{ d_buf, hh, mm, ss, ts_rem, rec.level.asText() }) catch {
+                    self.dropped_records += 1;
+                    return;
+                };
+                // Subsystem
+                if (rec.subsystem.len > 0) {
+                    std.fmt.format(w, " {s}:", .{rec.subsystem}) catch {};
+                }
+                // Message
+                std.fmt.format(w, " {s}", .{rec.message}) catch {};
+                // Fields
+                for (rec.fields) |field| {
+                    std.fmt.format(w, " {s}=", .{field.key}) catch {};
+                    switch (field.value) {
+                        .string => |s| std.fmt.format(w, "{s}", .{s}) catch {},
+                        .int => |i| std.fmt.format(w, "{d}", .{i}) catch {},
+                        .uint => |u| std.fmt.format(w, "{d}", .{u}) catch {},
+                        .float => |f| std.fmt.format(w, "{d:.2}", .{f}) catch {},
+                        .boolean => |b| std.fmt.format(w, "{}", .{b}) catch {},
+                    }
+                }
+            },
+        }
         buf.append(self.allocator, '\n') catch {
             self.dropped_records += 1;
             return;
