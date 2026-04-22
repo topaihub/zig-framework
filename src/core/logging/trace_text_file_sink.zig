@@ -107,6 +107,7 @@ pub const TraceTextFileSink = struct {
 
         var writer = std.Io.Writer.fromArrayList(&rendered);
         try formatRecord(&writer, record);
+        rendered = writer.toArrayList(); // Retrieve data written to writer
         try rendered.append(self.allocator, '\n');
 
         if (self.max_bytes) |max_bytes| {
