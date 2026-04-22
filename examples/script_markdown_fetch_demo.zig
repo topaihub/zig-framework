@@ -42,8 +42,8 @@ pub fn main() !void {
     });
     defer result.deinit(std.heap.page_allocator);
 
-    try std.fs.File.stdout().writeAll(result.output_json);
-    try std.fs.File.stdout().writeAll("\n");
+    try std.Io.stdout().writeAll(result.output_json);
+    try std.Io.stdout().writeAll("\n");
 }
 
 

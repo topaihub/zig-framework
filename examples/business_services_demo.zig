@@ -44,8 +44,8 @@ pub fn main() !void {
 
     if (envelope.result) |result| switch (result) {
         .success_json => |json| {
-            try std.fs.File.stdout().writeAll(json);
-            try std.fs.File.stdout().writeAll("\n");
+            try std.Io.stdout().writeAll(json);
+            try std.Io.stdout().writeAll("\n");
         },
         else => {},
     };
