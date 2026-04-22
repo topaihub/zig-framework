@@ -89,7 +89,7 @@ pub const MemoryEventBus = struct {
     max_subscriptions: usize = 64,
     events: std.ArrayListUnmanaged(RuntimeEvent) = .empty,
     subscriptions: std.ArrayListUnmanaged(SubscriptionState) = .empty,
-    mutex: std.Thread.Mutex = .{},
+    mutex: std.atomic.Mutex = .unlocked,
 
     const Self = @This();
 
@@ -122,7 +122,7 @@ pub const MemoryEventBus = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
 
         for (self.events.items) |*event| {
@@ -144,7 +144,7 @@ pub const MemoryEventBus = struct {
     }
 
     pub fn publish(self: *Self, topic: []const u8, payload_json: []const u8) anyerror!u64 {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
 
         const seq = self.next_seq;
@@ -153,7 +153,7 @@ pub const MemoryEventBus = struct {
         try self.events.append(self.allocator, .{
             .seq = seq,
             .topic = try self.allocator.dupe(u8, topic),
-            .ts_unix_ms = std.time.milliTimestamp(),
+            .ts_unix_ms = (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); }),
             .payload_json = try self.allocator.dupe(u8, payload_json),
         });
 
@@ -161,13 +161,13 @@ pub const MemoryEventBus = struct {
     }
 
     pub fn snapshot(self: *Self, allocator: std.mem.Allocator) anyerror![]RuntimeEvent {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
         return self.cloneEvents(allocator, self.events.items);
     }
 
     pub fn pollAfter(self: *Self, allocator: std.mem.Allocator, after_seq: u64) anyerror![]RuntimeEvent {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
 
         var matches: std.ArrayListUnmanaged(RuntimeEvent) = .empty;
@@ -183,7 +183,7 @@ pub const MemoryEventBus = struct {
     }
 
     pub fn latestSeq(self: *Self) u64 {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
 
         if (self.events.items.len == 0) {
@@ -193,7 +193,7 @@ pub const MemoryEventBus = struct {
     }
 
     pub fn subscribe(self: *Self, topic_filters: []const []const u8, after_seq: u64) anyerror!u64 {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
 
         if (self.subscriptions.items.len >= self.max_subscriptions) {
@@ -220,7 +220,7 @@ pub const MemoryEventBus = struct {
     }
 
     pub fn unsubscribe(self: *Self, subscription_id: u64) anyerror!void {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
 
         for (self.subscriptions.items, 0..) |*subscription, index| {
@@ -234,7 +234,7 @@ pub const MemoryEventBus = struct {
     }
 
     pub fn pollSubscription(self: *Self, allocator: std.mem.Allocator, subscription_id: u64, limit: usize) anyerror!EventBatch {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
 
         const subscription = self.findSubscriptionLocked(subscription_id) orelse return error.SubscriptionNotFound;
@@ -279,13 +279,13 @@ pub const MemoryEventBus = struct {
     }
 
     pub fn subscriptionCount(self: *Self) usize {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
         return self.subscriptions.items.len;
     }
 
     pub fn count(self: *Self) usize {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
         return self.events.items.len;
     }
@@ -431,3 +431,5 @@ test "memory event bus can unsubscribe subscriptions" {
     try bus.unsubscribe(subscription_id);
     try std.testing.expectEqual(@as(usize, 0), bus.subscriptionCount());
 }
+
+

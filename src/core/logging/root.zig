@@ -52,3 +52,5 @@ test "logging module exports are available" {
     try std.testing.expect(ConsoleStyle.pretty == .pretty);
     try std.testing.expect(RedactMode.safe == .safe);
 }
+
+

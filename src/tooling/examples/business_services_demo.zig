@@ -32,7 +32,7 @@ pub fn registerCommands(registry: *framework.CommandRegistry, services: *Example
 }
 
 test "business services demo works through command context user_data" {
-    var app_context = try framework.AppContext.init(std.testing.allocator, .{
+    var app_context = try framework.AppContext.init(std.testing.allocator, std.Io.Threaded.global_single_threaded.*.io(), .{
         .console_log_enabled = false,
     });
     defer app_context.deinit();
@@ -83,3 +83,5 @@ test "business services demo works through command context user_data" {
         else => return error.UnexpectedEnvelopeVariant,
     }
 }
+
+

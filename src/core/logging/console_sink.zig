@@ -25,7 +25,7 @@ pub const ConsoleSink = struct {
     dropped_records: usize = 0,
     emitter_ctx: ?*anyopaque = null,
     emitter_fn: ?EmitFn = null,
-    mutex: std.Thread.Mutex = .{},
+    mutex: std.atomic.Mutex = .unlocked,
 
     const Self = @This();
 
@@ -44,7 +44,7 @@ pub const ConsoleSink = struct {
     }
 
     pub fn setEmitter(self: *Self, ctx: *anyopaque, emit_fn: EmitFn) void {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
         self.emitter_ctx = ctx;
         self.emitter_fn = emit_fn;
@@ -62,7 +62,7 @@ pub const ConsoleSink = struct {
     pub fn flush(_: *Self) void {}
 
     pub fn write(self: *Self, record: *const LogRecord) void {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
         if (!self.min_level.allows(record.level)) {
             return;
@@ -87,30 +87,34 @@ pub const ConsoleSink = struct {
     }
 
     fn renderRecord(self: *Self, record: *const LogRecord, buffer: *std.ArrayListUnmanaged(u8)) !void {
-        const writer = buffer.writer(std.heap.page_allocator);
+        var temp = std.array_list.Managed(u8).init(std.heap.page_allocator);
+        errdefer temp.deinit();
+        var unmanaged = temp.moveToUnmanaged();
+        var writer = std.Io.Writer.fromArrayList(&unmanaged);
 
         switch (self.style) {
             .json => {
-                try record.writeJson(writer);
+                try record.writeJson(&writer);
             },
             .compact => {
                 try writer.print("[{s}] {s}: {s}", .{ record.level.asText(), record.subsystem, record.message });
-                try appendContext(writer, record);
-                try appendFieldPairs(writer, record.fields);
+                try appendContext(&writer, record);
+                try appendFieldPairs(&writer, record.fields);
             },
             .pretty => {
                 const ts = try formatPrettyTimestamp(std.heap.page_allocator, record.ts_unix_ms);
                 defer std.heap.page_allocator.free(ts);
                 try writer.print("{s} {s: >5} ", .{ ts, prettyLevelText(record.level) });
-                if (!try renderPrettyTyped(writer, record) and !try renderPrettyRequestSpan(writer, record) and !try renderPrettyMethodTrace(writer, record) and !try renderPrettyStepSpan(writer, record)) {
+                if (!try renderPrettyTyped(&writer, record) and !try renderPrettyRequestSpan(&writer, record) and !try renderPrettyMethodTrace(&writer, record) and !try renderPrettyStepSpan(&writer, record)) {
                     try writer.print("{s}: {s}", .{ record.subsystem, record.message });
-                    try appendContext(writer, record);
-                    try appendFieldPairs(writer, record.fields);
+                    try appendContext(&writer, record);
+                    try appendFieldPairs(&writer, record.fields);
                 }
             },
         }
 
         try writer.writeByte('\n');
+        buffer.* = unmanaged;
     }
 
     fn emit(self: *Self, to_stderr: bool, bytes: []const u8) !void {
@@ -118,13 +122,20 @@ pub const ConsoleSink = struct {
             return emit_fn(self.emitter_ctx.?, to_stderr, bytes);
         }
 
+        // 使用 Threaded Io 的默认实例
         var local_buffer: [4096]u8 = undefined;
+        var threaded = std.Io.Threaded.init(std.heap.page_allocator, .{});
+        defer threaded.deinit();
+        const io = threaded.io();
+        
         if (to_stderr) {
-            var stderr_writer = std.fs.File.stderr().writer(&local_buffer);
+            var stderr_file = std.Io.File.stderr();
+            var stderr_writer = stderr_file.writer(io, &local_buffer);
             try stderr_writer.interface.writeAll(bytes);
             try stderr_writer.interface.flush();
         } else {
-            var stdout_writer = std.fs.File.stdout().writer(&local_buffer);
+            var stdout_file = std.Io.File.stdout();
+            var stdout_writer = stdout_file.writer(io, &local_buffer);
             try stdout_writer.interface.writeAll(bytes);
             try stdout_writer.interface.flush();
         }
@@ -150,7 +161,7 @@ pub const ConsoleSink = struct {
     }
 };
 
-fn renderPrettyTyped(writer: anytype, record: *const LogRecord) !bool {
+fn renderPrettyTyped(writer: *std.Io.Writer, record: *const LogRecord) !bool {
     return switch (record.kind) {
         .request => try renderPrettyRequestSpan(writer, record),
         .method => try renderPrettyMethodTrace(writer, record),
@@ -160,7 +171,7 @@ fn renderPrettyTyped(writer: anytype, record: *const LogRecord) !bool {
     };
 }
 
-fn appendContext(writer: anytype, record: *const LogRecord) !void {
+fn appendContext(writer: *std.Io.Writer, record: *const LogRecord) !void {
     if (record.trace_id) |trace_id| {
         try writer.print(" trace={s}", .{trace_id});
     }
@@ -175,7 +186,7 @@ fn appendContext(writer: anytype, record: *const LogRecord) !void {
     }
 }
 
-fn renderPrettyRequestSpan(writer: anytype, record: *const LogRecord) !bool {
+fn renderPrettyRequestSpan(writer: *std.Io.Writer, record: *const LogRecord) !bool {
     if (!std.mem.eql(u8, record.subsystem, "request")) return false;
 
     const trace_id = record.trace_id orelse return false;
@@ -202,7 +213,7 @@ fn renderPrettyRequestSpan(writer: anytype, record: *const LogRecord) !bool {
     return true;
 }
 
-fn renderPrettyStepSpan(writer: anytype, record: *const LogRecord) !bool {
+fn renderPrettyStepSpan(writer: *std.Io.Writer, record: *const LogRecord) !bool {
     const step = fieldString(record.fields, "step") orelse return false;
     if (!std.mem.eql(u8, record.message, "Step started") and !std.mem.eql(u8, record.message, "Step completed")) return false;
 
@@ -212,7 +223,7 @@ fn renderPrettyStepSpan(writer: anytype, record: *const LogRecord) !bool {
     return true;
 }
 
-fn renderPrettyMethodTrace(writer: anytype, record: *const LogRecord) !bool {
+fn renderPrettyMethodTrace(writer: *std.Io.Writer, record: *const LogRecord) !bool {
     if (!std.mem.eql(u8, record.subsystem, "method")) return false;
     const method = fieldString(record.fields, "method") orelse return false;
     if (!(std.mem.eql(u8, record.message, "ENTRY") or std.mem.eql(u8, record.message, "EXIT") or std.mem.eql(u8, record.message, "ERROR"))) return false;
@@ -262,26 +273,27 @@ fn formatPrettyTimestamp(allocator: std.mem.Allocator, ts_unix_ms: i64) ![]u8 {
     const minute = (secs_of_day % 3600) / 60;
     const second = secs_of_day % 60;
 
-    var buf: std.ArrayListUnmanaged(u8) = .empty;
+    var managed = std.array_list.Managed(u8).init(allocator);
+    var buf = managed.moveToUnmanaged();
     defer buf.deinit(allocator);
-    const writer = buf.writer(allocator);
+    var writer = std.Io.Writer.fromArrayList(&buf);
 
     const year: u64 = @intCast(date.year);
     const month: u8 = date.month;
     const day: u8 = date.day;
-    try appendPaddedUnsigned(writer, year, 4);
+    try appendPaddedUnsigned(&writer, year, 4);
     try writer.writeByte('-');
-    try appendPaddedUnsigned(writer, month, 2);
+    try appendPaddedUnsigned(&writer, month, 2);
     try writer.writeByte('-');
-    try appendPaddedUnsigned(writer, day, 2);
+    try appendPaddedUnsigned(&writer, day, 2);
     try writer.writeByte('T');
-    try appendPaddedUnsigned(writer, hour, 2);
-    try writer.writeByte(':');
-    try appendPaddedUnsigned(writer, minute, 2);
-    try writer.writeByte(':');
-    try appendPaddedUnsigned(writer, second, 2);
-    try writer.writeByte('.');
-    try appendPaddedUnsigned(writer, millis, 3);
+    try appendPaddedUnsigned(&writer, hour, 2);
+    try writer.writeAll(":");
+    try appendPaddedUnsigned(&writer, minute, 2);
+    try writer.writeAll(":");
+    try appendPaddedUnsigned(&writer, second, 2);
+    try writer.writeAll(".");
+    try appendPaddedUnsigned(&writer, millis, 3);
     try writer.writeByte('Z');
 
     return allocator.dupe(u8, buf.items);
@@ -310,7 +322,7 @@ fn civilFromDays(z: i64) CivilDate {
     };
 }
 
-fn appendPaddedUnsigned(writer: anytype, value: anytype, width: usize) !void {
+fn appendPaddedUnsigned(writer: *std.Io.Writer, value: anytype, width: usize) !void {
     var buffer: [20]u8 = undefined;
     var current = @as(u64, @intCast(value));
     var index: usize = buffer.len;
@@ -571,7 +583,7 @@ test "console sink pretty renders method trace style" {
 test "console sink supports concurrent writes without degrading" {
     const Capture = struct {
         allocator: std.mem.Allocator,
-        mutex: std.Thread.Mutex = .{},
+        mutex: std.atomic.Mutex = .unlocked,
         stdout: std.ArrayListUnmanaged(u8) = .empty,
 
         fn deinit(self: *@This()) void {
@@ -580,7 +592,7 @@ test "console sink supports concurrent writes without degrading" {
 
         fn emit(ptr: *anyopaque, _: bool, bytes: []const u8) !void {
             const self: *@This() = @ptrCast(@alignCast(ptr));
-            self.mutex.lock();
+            while (!self.mutex.tryLock()) {}
             defer self.mutex.unlock();
             try self.stdout.appendSlice(self.allocator, bytes);
         }
@@ -614,3 +626,5 @@ test "console sink supports concurrent writes without degrading" {
     try std.testing.expect(!sink.degraded);
     try std.testing.expect(std.mem.count(u8, capture.stdout.items, "\n") == 150);
 }
+
+

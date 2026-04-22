@@ -25,3 +25,5 @@ test "agentkit scaffold exports are stable" {
     try std.testing.expect(MODULE_STAGE == .scaffold);
     try std.testing.expectEqualStrings("ready", ProviderHealthState.ready.asText());
 }
+
+

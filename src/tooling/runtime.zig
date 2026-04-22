@@ -87,7 +87,7 @@ pub const ToolingRuntime = struct {
 };
 
 test "tooling runtime initializes with owned runner and script host" {
-    var app_context = try runtime.AppContext.init(std.testing.allocator, .{
+    var app_context = try runtime.AppContext.init(std.testing.allocator, std.Io.Threaded.global_single_threaded.*.io(), .{
         .console_log_enabled = false,
     });
     defer app_context.deinit();
@@ -107,3 +107,5 @@ test "tooling runtime initializes with owned runner and script host" {
     try std.testing.expect(tooling_runtime.tool_runner.registry == &registry);
     try std.testing.expect(tooling_runtime.script_host.process_runner.name().len > 0);
 }
+
+

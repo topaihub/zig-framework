@@ -35,3 +35,5 @@ test "capability manifest keeps group and flag slices" {
     try std.testing.expectEqualStrings("adapters", manifest.groups[0].key);
     try std.testing.expect(manifest.flags[0].enabled);
 }
+
+

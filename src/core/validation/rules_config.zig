@@ -203,3 +203,5 @@ test "config rules require risk confirmation for public bind and pairing disable
     try std.testing.expectEqual(@as(usize, 2), report.issueCount());
     try std.testing.expect(report.requiresRiskConfirmation());
 }
+
+

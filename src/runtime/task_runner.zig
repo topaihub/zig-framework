@@ -108,7 +108,7 @@ pub const TaskRunner = struct {
     threads: std.ArrayListUnmanaged(std.Thread) = .empty,
     observer: ?Observer = null,
     event_bus: ?EventBus = null,
-    mutex: std.Thread.Mutex = .{},
+    mutex: std.atomic.Mutex = .unlocked,
 
     const Self = @This();
 
@@ -136,7 +136,7 @@ pub const TaskRunner = struct {
         }
         self.threads.deinit(self.allocator);
 
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
 
         for (self.tasks.items) |*task| {
@@ -148,7 +148,7 @@ pub const TaskRunner = struct {
     pub fn submit(self: *Self, command: []const u8, request_id: ?[]const u8) anyerror!TaskAccepted {
         var accepted: TaskAccepted = undefined;
 
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
 
         const task_id = try std.fmt.allocPrint(self.allocator, "task_{d:0>6}", .{self.next_id});
@@ -192,7 +192,7 @@ pub const TaskRunner = struct {
             return err;
         };
 
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
         try self.threads.append(self.allocator, thread);
         return accepted;
@@ -219,7 +219,7 @@ pub const TaskRunner = struct {
     pub fn cancel(self: *Self, id: []const u8) anyerror!void {
         var payload: []u8 = undefined;
 
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
 
         const task = self.findMutableByIdLocked(id) orelse return error.TaskNotFound;
@@ -229,16 +229,16 @@ pub const TaskRunner = struct {
 
         task.state = .cancelled;
         if (task.started_at_ms == null) {
-            task.started_at_ms = std.time.milliTimestamp();
+            task.started_at_ms = (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); });
         }
-        task.finished_at_ms = std.time.milliTimestamp();
+        task.finished_at_ms = (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); });
         payload = try self.taskEventPayloadLocked(task.*);
         defer self.allocator.free(payload);
         self.emitEvent("task.cancelled", payload);
     }
 
     pub fn snapshotById(self: *Self, allocator: std.mem.Allocator, id: []const u8) anyerror!?TaskSummary {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
 
         const task = self.findByIdLocked(id) orelse return null;
@@ -246,7 +246,7 @@ pub const TaskRunner = struct {
     }
 
     pub fn snapshotByRequestId(self: *Self, allocator: std.mem.Allocator, request_id: []const u8) anyerror!?TaskSummary {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
 
         const task = self.findByRequestIdLocked(request_id) orelse return null;
@@ -254,7 +254,7 @@ pub const TaskRunner = struct {
     }
 
     pub fn countByState(self: *Self, state: TaskState) usize {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
 
         var total: usize = 0;
@@ -267,7 +267,7 @@ pub const TaskRunner = struct {
     }
 
     pub fn latest(self: *Self, allocator: std.mem.Allocator) anyerror!?TaskSummary {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
 
         if (self.tasks.items.len == 0) {
@@ -277,7 +277,7 @@ pub const TaskRunner = struct {
     }
 
     pub fn snapshot(self: *Self, allocator: std.mem.Allocator) anyerror![]TaskSummary {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
 
         const summaries = try allocator.alloc(TaskSummary, self.tasks.items.len);
@@ -291,9 +291,9 @@ pub const TaskRunner = struct {
     }
 
     pub fn waitForCompletion(self: *Self, allocator: std.mem.Allocator, id: []const u8, timeout_ms: u64) anyerror!TaskSummary {
-        const started = std.time.milliTimestamp();
+        const started = (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); });
 
-        while (std.time.milliTimestamp() - started <= @as(i64, @intCast(timeout_ms))) {
+        while ((blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); }) - started <= @as(i64, @intCast(timeout_ms))) {
             if (try self.snapshotById(allocator, id)) |summary| {
                 if (summary.state.isTerminal()) {
                     return summary;
@@ -308,7 +308,7 @@ pub const TaskRunner = struct {
     }
 
     pub fn count(self: *Self) usize {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
         return self.tasks.items.len;
     }
@@ -316,7 +316,7 @@ pub const TaskRunner = struct {
     fn transitionToRunning(self: *Self, id: []const u8) anyerror!void {
         var payload: []u8 = undefined;
 
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
 
         const task = self.findMutableByIdLocked(id) orelse return error.TaskNotFound;
@@ -324,7 +324,7 @@ pub const TaskRunner = struct {
             return error.InvalidTaskTransition;
         }
         task.state = .running;
-        task.started_at_ms = std.time.milliTimestamp();
+        task.started_at_ms = (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); });
         payload = try self.taskEventPayloadLocked(task.*);
         defer self.allocator.free(payload);
         self.emitEvent("task.running", payload);
@@ -333,7 +333,7 @@ pub const TaskRunner = struct {
     fn transitionToSucceeded(self: *Self, id: []const u8, result_json: ?[]u8) anyerror!void {
         var payload: []u8 = undefined;
 
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
 
         const task = self.findMutableByIdLocked(id) orelse return error.TaskNotFound;
@@ -342,9 +342,9 @@ pub const TaskRunner = struct {
         }
         task.state = .succeeded;
         if (task.started_at_ms == null) {
-            task.started_at_ms = std.time.milliTimestamp();
+            task.started_at_ms = (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); });
         }
-        task.finished_at_ms = std.time.milliTimestamp();
+        task.finished_at_ms = (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); });
         if (task.error_code) |error_code| {
             self.allocator.free(error_code);
             task.error_code = null;
@@ -364,7 +364,7 @@ pub const TaskRunner = struct {
     fn transitionToFailed(self: *Self, id: []const u8, owned_error_code: ?[]u8) anyerror!void {
         var payload: []u8 = undefined;
 
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
 
         const task = self.findMutableByIdLocked(id) orelse {
@@ -377,9 +377,9 @@ pub const TaskRunner = struct {
         }
         task.state = .failed;
         if (task.started_at_ms == null) {
-            task.started_at_ms = std.time.milliTimestamp();
+            task.started_at_ms = (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); });
         }
-        task.finished_at_ms = std.time.milliTimestamp();
+        task.finished_at_ms = (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); });
         if (task.error_code) |existing| self.allocator.free(existing);
         task.error_code = owned_error_code;
         if (task.result_json) |result_json| {
@@ -487,7 +487,7 @@ pub const TaskRunner = struct {
     }
 };
 
-fn writeJsonString(writer: anytype, value: []const u8) anyerror!void {
+fn writeJsonString(writer: *std.Io.Writer, value: []const u8) anyerror!void {
     try writer.writeByte('"');
     for (value) |ch| {
         switch (ch) {
@@ -626,3 +626,5 @@ test "task runner executes async jobs and stores result" {
     try std.testing.expect(observer.count() >= 3);
     try std.testing.expect(event_bus.count() >= 3);
 }
+
+

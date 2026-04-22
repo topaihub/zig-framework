@@ -42,3 +42,5 @@ test "tool definition keeps stable defaults" {
     try std.testing.expect(definition.native_handler == null);
     try std.testing.expect(definition.script_spec == null);
 }
+
+

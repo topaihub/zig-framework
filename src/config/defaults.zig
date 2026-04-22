@@ -72,3 +72,5 @@ test "config defaults can seed store" {
     try std.testing.expectEqual(@as(usize, 2), stats.applied_count);
     try std.testing.expectEqualStrings("127.0.0.1", store.get("gateway.host").?.string);
 }
+
+

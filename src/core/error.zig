@@ -673,3 +673,5 @@ test "validation report can require explicit confirmation" {
     try std.testing.expectEqualStrings(code.VALIDATION_RISK_CONFIRMATION_REQUIRED, app_error.code);
     try std.testing.expectEqualStrings("service.restart", app_error.target.?);
 }
+
+

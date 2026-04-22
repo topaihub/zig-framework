@@ -135,7 +135,7 @@ fn writeJsonStringField(writer: anytype, key: []const u8, value: []const u8, fir
     try writeJsonString(writer, value);
 }
 
-fn writeJsonString(writer: anytype, value: []const u8) !void {
+fn writeJsonString(writer: *std.Io.Writer, value: []const u8) !void {
     try writer.writeByte('"');
     for (value) |ch| {
         switch (ch) {
@@ -218,3 +218,5 @@ test "validation report writes issue details as raw json" {
 
     try std.testing.expect(std.mem.indexOf(u8, buf.items, "\"details\":{\"expected\":\"string\",\"actual\":\"boolean\"}") != null);
 }
+
+

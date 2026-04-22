@@ -66,7 +66,8 @@ pub const NativeClock = struct {
     }
 
     pub fn nowUnixMs(_: *NativeClock) i64 {
-        return std.time.milliTimestamp();
+        const io = std.Io.Threaded.global_single_threaded.*.io();
+        return std.Io.Timestamp.now(io, .real).toMilliseconds();
     }
 
     pub fn monotonicNs(_: *NativeClock) u64 {
@@ -117,3 +118,5 @@ test "deadline helpers are stable" {
     clock.sleepMs(5);
     try std.testing.expect(deadlineExceeded(clock, deadline));
 }
+
+

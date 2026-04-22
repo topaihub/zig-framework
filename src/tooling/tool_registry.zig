@@ -53,3 +53,5 @@ test "tool registry supports register find and duplicate detection" {
         .description = "duplicate tool",
     }));
 }
+
+

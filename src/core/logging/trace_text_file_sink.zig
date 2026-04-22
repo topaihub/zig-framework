@@ -35,7 +35,7 @@ pub const TraceTextFileSink = struct {
     degraded: bool = false,
     dropped_records: usize = 0,
     options: TraceTextFileSinkOptions = .{},
-    mutex: std.Thread.Mutex = .{},
+    mutex: std.atomic.Mutex = .unlocked,
 
     const Self = @This();
 
@@ -63,7 +63,7 @@ pub const TraceTextFileSink = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
         self.allocator.free(self.path);
     }
@@ -76,7 +76,7 @@ pub const TraceTextFileSink = struct {
     }
 
     pub fn statusSnapshot(self: *Self, allocator: std.mem.Allocator) !TraceTextFileSinkStatus {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
         return .{
             .path = try allocator.dupe(u8, self.path),
@@ -88,7 +88,7 @@ pub const TraceTextFileSink = struct {
     }
 
     pub fn write(self: *Self, record: *const LogRecord) void {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
         self.writeInternal(record) catch {
             self.degraded = true;
@@ -101,10 +101,12 @@ pub const TraceTextFileSink = struct {
     fn writeInternal(self: *Self, record: *const LogRecord) !void {
         if (shouldSkipRecord(record, self.options)) return;
 
-        var rendered: std.ArrayListUnmanaged(u8) = .empty;
+        var temp = std.array_list.Managed(u8).init(self.allocator);
+        var rendered = temp.moveToUnmanaged();
         defer rendered.deinit(self.allocator);
 
-        try formatRecord(rendered.writer(self.allocator), record);
+        var writer = std.Io.Writer.fromArrayList(&rendered);
+        try formatRecord(&writer, record);
         try rendered.append(self.allocator, '\n');
 
         if (self.max_bytes) |max_bytes| {
@@ -120,9 +122,10 @@ pub const TraceTextFileSink = struct {
         // current_bytes, max_bytes, and on-disk trace file state to decide whether
         // a new generation should be created.
         var file = try openAppendFile(self.path);
-        defer file.close();
+        const io_write = std.Io.Threaded.global_single_threaded.*.io();
+        defer file.close(io_write);
 
-        try file.writeAll(rendered.items);
+        try file.writeStreamingAll(io_write, rendered.items);
         self.current_bytes += rendered.items.len;
     }
 
@@ -163,7 +166,7 @@ fn shouldSkipRecord(record: *const LogRecord, options: TraceTextFileSinkOptions)
     return false;
 }
 
-fn formatRecord(writer: anytype, record: *const LogRecord) !void {
+fn formatRecord(writer: *std.Io.Writer, record: *const LogRecord) !void {
     const time_text = try formatTimeOfDay(record.ts_unix_ms);
     try writer.print("[{s} {s}] ", .{ time_text, shortLevelText(record.level) });
 
@@ -432,22 +435,24 @@ fn formatTimeOfDay(ts_unix_ms: i64) ![8]u8 {
 }
 
 fn currentSize(path: []const u8) u64 {
-    const stat = std.fs.cwd().statFile(path) catch return 0;
+    const io = std.Io.Threaded.global_single_threaded.*.io();
+    const stat = std.Io.Dir.cwd().statFile(io, path, .{}) catch return 0;
     return stat.size;
 }
 
 fn ensureParentDirectory(path: []const u8) !void {
     if (std.fs.path.dirname(path)) |dir_name| {
-        try std.fs.cwd().makePath(dir_name);
+        const io = std.Io.Threaded.global_single_threaded.*.io();
+        try std.Io.Dir.cwd().createDirPath(io, dir_name);
     }
 }
 
-fn openAppendFile(path: []const u8) !std.fs.File {
-    var file = std.fs.cwd().openFile(path, .{ .mode = .read_write }) catch |err| switch (err) {
-        error.FileNotFound => try std.fs.cwd().createFile(path, .{ .read = true, .truncate = false }),
+fn openAppendFile(path: []const u8) !std.Io.File {
+    const io = std.Io.Threaded.global_single_threaded.*.io();
+    const file = std.Io.Dir.cwd().openFile(io, path, .{ .mode = .read_write }) catch |err| switch (err) {
+        error.FileNotFound => try std.Io.Dir.cwd().createFile(io, path, .{ .read = true, .truncate = false }),
         else => return err,
     };
-    try file.seekFromEnd(0);
     return file;
 }
 
@@ -654,3 +659,5 @@ test "trace text file sink exposes status snapshot" {
     try std.testing.expectEqual(@as(?u64, 8192), status.max_bytes);
     try std.testing.expect(!status.degraded);
 }
+
+

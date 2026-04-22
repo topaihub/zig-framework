@@ -52,3 +52,5 @@ test "tool context can read validated params" {
     try std.testing.expect(ctx.param("path") != null);
     try std.testing.expect(ctx.param("missing") == null);
 }
+
+

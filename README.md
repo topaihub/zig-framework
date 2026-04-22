@@ -2,6 +2,8 @@
 
 `framework` 是一个可复用的 Zig 应用框架，当前仍以骨架为主，但已经开始承载首批共享基础类型。
 
+> **Prerequisite:** use Zig 0.16.0 for build and tests.
+
 当前目标是沉淀一套与具体业务无关的基础能力，供 `ourclaw` 和未来其他 Zig 应用复用，包括：
 
 - 日志

@@ -37,7 +37,7 @@ pub const MetricsSnapshot = struct {
 
 pub const MetricsObserver = struct {
     snapshot_data: MetricsSnapshot = .{},
-    mutex: std.Thread.Mutex = .{},
+    mutex: std.atomic.Mutex = .unlocked,
 
     const Self = @This();
 
@@ -62,7 +62,7 @@ pub const MetricsObserver = struct {
     }
 
     pub fn recordWithPayload(self: *Self, topic: []const u8, payload_json: []const u8) anyerror!void {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
 
         self.snapshot_data.total_events += 1;
@@ -145,13 +145,13 @@ pub const MetricsObserver = struct {
     }
 
     pub fn flush(self: *Self) anyerror!void {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
         self.snapshot_data.flush_count += 1;
     }
 
     pub fn snapshot(self: *Self) MetricsSnapshot {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
         return self.snapshot_data;
     }
@@ -218,3 +218,5 @@ test "metrics observer tracks command and task counters" {
     try std.testing.expectEqual(@as(usize, 1), snapshot.task_results_written);
     try std.testing.expectEqual(@as(usize, 1), snapshot.flush_count);
 }
+
+

@@ -37,7 +37,7 @@ pub fn begin(allocator: std.mem.Allocator, logger: *Logger, source: RequestSourc
         .allocator = allocator,
         .logger = logger,
         .trace_id = trace_id,
-        .started_at_ms = std.time.milliTimestamp(),
+        .started_at_ms = (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); }),
         .source = source,
         .request_id = request_id,
         .method = method,
@@ -53,7 +53,7 @@ pub fn begin(allocator: std.mem.Allocator, logger: *Logger, source: RequestSourc
 }
 
 pub fn complete(logger: *Logger, trace: *const RequestTrace, status_code: ?u16, error_code: ?[]const u8) void {
-    const elapsed_ms: u64 = @intCast(@max(0, std.time.milliTimestamp() - trace.started_at_ms));
+    const elapsed_ms: u64 = @intCast(@max(0, (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); }) - trace.started_at_ms));
     logCompleted(logger, trace, status_code, .{ .duration_ms = elapsed_ms, .error_code = error_code });
 }
 
@@ -106,7 +106,8 @@ fn logCompleted(logger: *Logger, trace: *const RequestTrace, status_code: ?u16, 
 
 fn generateTraceId(allocator: std.mem.Allocator) anyerror![]u8 {
     var bytes: [8]u8 = undefined;
-    std.crypto.random.bytes(&bytes);
+    var prng = std.Random.DefaultPrng.init(0);
+    prng.random().bytes(&bytes);
     var out: [16]u8 = undefined;
     const alphabet = "0123456789abcdef";
     for (bytes, 0..) |byte, index| {
@@ -131,3 +132,5 @@ test "request trace generates 16-char trace id" {
     try std.testing.expectEqual(core.logging.LogRecordKind.request, memory_sink.recordAt(0).?.kind);
     try std.testing.expectEqual(core.logging.LogRecordKind.request, memory_sink.recordAt(1).?.kind);
 }
+
+

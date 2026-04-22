@@ -238,7 +238,7 @@ test "workflow runner executes sequential steps successfully" {
         }
     };
 
-    var app_context = try runtime.AppContext.init(std.testing.allocator, .{
+    var app_context = try runtime.AppContext.init(std.testing.allocator, std.Io.Threaded.global_single_threaded.*.io(), .{
         .console_log_enabled = false,
     });
     defer app_context.deinit();
@@ -283,7 +283,7 @@ test "workflow runner retries and succeeds" {
         }
     };
 
-    var app_context = try runtime.AppContext.init(std.testing.allocator, .{
+    var app_context = try runtime.AppContext.init(std.testing.allocator, std.Io.Threaded.global_single_threaded.*.io(), .{
         .console_log_enabled = false,
     });
     defer app_context.deinit();
@@ -325,7 +325,7 @@ test "workflow runner retry fails after budget" {
         else => "exit 9",
     };
 
-    var app_context = try runtime.AppContext.init(std.testing.allocator, .{
+    var app_context = try runtime.AppContext.init(std.testing.allocator, std.Io.Threaded.global_single_threaded.*.io(), .{
         .console_log_enabled = false,
     });
     defer app_context.deinit();
@@ -365,7 +365,7 @@ test "workflow runner can submit async workflow task" {
         }
     };
 
-    var app_context = try runtime.AppContext.init(std.testing.allocator, .{
+    var app_context = try runtime.AppContext.init(std.testing.allocator, std.Io.Threaded.global_single_threaded.*.io(), .{
         .console_log_enabled = false,
     });
     defer app_context.deinit();
@@ -399,3 +399,5 @@ test "workflow runner can submit async workflow task" {
     try std.testing.expect(summary.state.isTerminal());
     try std.testing.expectEqual(runtime.TaskState.succeeded, summary.state);
 }
+
+

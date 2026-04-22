@@ -59,3 +59,5 @@ test "authority ordering is stable" {
     try std.testing.expect(Authority.allows(.operator, .public));
     try std.testing.expect(!Authority.allows(.public, .admin));
 }
+
+

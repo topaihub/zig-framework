@@ -47,3 +47,5 @@ test "tooling scaffold exports are stable" {
     try std.testing.expect(MODULE_STAGE == .scaffold);
     try std.testing.expectEqualStrings("native_zig", ToolExecutionKind.native_zig.asText());
 }
+
+

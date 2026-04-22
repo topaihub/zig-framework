@@ -103,3 +103,5 @@ test "multi sink fans out and isolates degraded sink" {
     try std.testing.expectEqual(@as(usize, 1), memory_sink.count());
     try std.testing.expectEqualStrings("fanout", memory_sink.latest().?.message);
 }
+
+

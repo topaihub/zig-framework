@@ -29,3 +29,5 @@ pub const LogSink = struct {
         return self.vtable.name(self.ptr);
     }
 };
+
+

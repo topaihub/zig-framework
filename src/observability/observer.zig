@@ -41,7 +41,7 @@ pub const MemoryObserver = struct {
     allocator: std.mem.Allocator,
     events: std.ArrayListUnmanaged(ObservedEvent) = .empty,
     flush_count: usize = 0,
-    mutex: std.Thread.Mutex = .{},
+    mutex: std.atomic.Mutex = .unlocked,
 
     const Self = @This();
 
@@ -55,7 +55,7 @@ pub const MemoryObserver = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
 
         for (self.events.items) |*event| {
@@ -72,12 +72,12 @@ pub const MemoryObserver = struct {
     }
 
     pub fn record(self: *Self, topic: []const u8, payload_json: []const u8) anyerror!void {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
 
         try self.events.append(self.allocator, .{
             .topic = try self.allocator.dupe(u8, topic),
-            .ts_unix_ms = std.time.milliTimestamp(),
+            .ts_unix_ms = (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); }),
             .payload_json = try self.allocator.dupe(u8, payload_json),
         });
     }
@@ -87,7 +87,7 @@ pub const MemoryObserver = struct {
     }
 
     pub fn snapshot(self: *Self, allocator: std.mem.Allocator) anyerror![]ObservedEvent {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
 
         const events = try allocator.alloc(ObservedEvent, self.events.items.len);
@@ -132,3 +132,5 @@ test "memory observer records and snapshots events" {
     try std.testing.expectEqual(@as(usize, 1), observer.flush_count);
     try std.testing.expectEqualStrings("command.started", events[0].topic);
 }
+
+

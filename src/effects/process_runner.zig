@@ -234,10 +234,10 @@ fn buildEnvMap(allocator: std.mem.Allocator, env_vars: []const ProcessEnvVar) !?
 fn waitForExit(child: *std.process.Child, timeout_ms: ?u32) !std.process.Child.Term {
     if (timeout_ms == null) return child.wait();
 
-    const deadline = std.time.milliTimestamp() + @as(i64, timeout_ms.?);
+    const deadline = (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); }) + @as(i64, timeout_ms.?);
     while (true) {
         if (try pollExited(child)) |term| return term;
-        if (std.time.milliTimestamp() >= deadline) return error.ProcessTimedOut;
+        if ((blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); }) >= deadline) return error.ProcessTimedOut;
         std.Thread.sleep(5 * std.time.ns_per_ms);
     }
 }
@@ -409,3 +409,5 @@ test "native process runner injects env vars" {
 
     try std.testing.expectEqualStrings("effects-ok", trimLineEndings(result.stdout));
 }
+
+

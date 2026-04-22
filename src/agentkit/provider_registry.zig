@@ -57,3 +57,5 @@ test "provider registry supports register find and duplicate detection" {
         .default_model = "gpt-4o-mini",
     }));
 }
+
+

@@ -24,7 +24,7 @@ pub const JsonlFileSink = struct {
     current_bytes: u64 = 0,
     degraded: bool = false,
     dropped_records: usize = 0,
-    mutex: std.Thread.Mutex = .{},
+    mutex: std.atomic.Mutex = .unlocked,
 
     const Self = @This();
 
@@ -35,19 +35,19 @@ pub const JsonlFileSink = struct {
         .name = nameErased,
     };
 
-    pub fn init(allocator: std.mem.Allocator, path: []const u8, max_bytes: ?u64) !Self {
+    pub fn init(allocator: std.mem.Allocator, path: []const u8, max_bytes: ?u64, io: std.Io) !Self {
         var self = Self{
             .allocator = allocator,
             .path = try allocator.dupe(u8, path),
             .max_bytes = max_bytes,
         };
 
-        self.current_bytes = currentSize(self.path);
+        self.current_bytes = currentSize(self.path, io);
         return self;
     }
 
     pub fn deinit(self: *Self) void {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
         self.allocator.free(self.path);
     }
@@ -60,7 +60,7 @@ pub const JsonlFileSink = struct {
     }
 
     pub fn statusSnapshot(self: *Self, allocator: std.mem.Allocator) !JsonlFileSinkStatus {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
         return .{
             .path = try allocator.dupe(u8, self.path),
@@ -72,7 +72,7 @@ pub const JsonlFileSink = struct {
     }
 
     pub fn write(self: *Self, record: *const LogRecord) void {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
         self.writeInternal(record) catch {
             self.degraded = true;
@@ -83,15 +83,17 @@ pub const JsonlFileSink = struct {
     pub fn flush(_: *Self) void {}
 
     fn writeInternal(self: *Self, record: *const LogRecord) !void {
-        var rendered: std.ArrayListUnmanaged(u8) = .empty;
-        defer rendered.deinit(self.allocator);
-
-        try record.writeJson(rendered.writer(self.allocator));
-        try rendered.append(self.allocator, '\n');
+        var temp = std.array_list.Managed(u8).init(self.allocator);
+        errdefer temp.deinit();
+        var unmanaged = temp.moveToUnmanaged();
+        var writer = std.Io.Writer.fromArrayList(&unmanaged);
+        try record.writeJson(&writer);
+        try unmanaged.append(self.allocator, '\n');
 
         if (self.max_bytes) |max_bytes| {
-            if (self.current_bytes + rendered.items.len > max_bytes) {
+            if (self.current_bytes + unmanaged.items.len > max_bytes) {
                 self.dropped_records += 1;
+                unmanaged.deinit(self.allocator);
                 return;
             }
         }
@@ -102,10 +104,12 @@ pub const JsonlFileSink = struct {
         // current_bytes, max_bytes, and on-disk file state to decide whether to
         // rotate the current file or prune old generations.
         var file = try openAppendFile(self.path);
-        defer file.close();
+        const io_write = std.Io.Threaded.global_single_threaded.*.io();
+        defer file.close(io_write);
 
-        try file.writeAll(rendered.items);
-        self.current_bytes += rendered.items.len;
+        try file.writeStreamingAll(io_write, unmanaged.items);
+        self.current_bytes += unmanaged.items.len;
+        unmanaged.deinit(self.allocator);
     }
 
     fn writeErased(ptr: *anyopaque, record: *const LogRecord) void {
@@ -128,24 +132,25 @@ pub const JsonlFileSink = struct {
     }
 };
 
-fn currentSize(path: []const u8) u64 {
-    const stat = std.fs.cwd().statFile(path) catch return 0;
+fn currentSize(path: []const u8, io: std.Io) u64 {
+    const stat = std.Io.Dir.cwd().statFile(io, path, .{}) catch return 0;
     return stat.size;
 }
 
 fn ensureParentDirectory(path: []const u8) !void {
     if (std.fs.path.dirname(path)) |dir_name| {
-        try std.fs.cwd().makePath(dir_name);
+        const io = std.Io.Threaded.global_single_threaded.*.io();
+        try std.Io.Dir.cwd().createDirPath(io, dir_name);
     }
 }
 
-fn openAppendFile(path: []const u8) !std.fs.File {
-    var file = std.fs.cwd().openFile(path, .{ .mode = .read_write }) catch |err| switch (err) {
-        error.FileNotFound => try std.fs.cwd().createFile(path, .{ .read = true, .truncate = false }),
+fn openAppendFile(path: []const u8) !std.Io.File {
+    const io = std.Io.Threaded.global_single_threaded.*.io();
+    const file = std.Io.Dir.cwd().openFile(io, path, .{ .mode = .read_write }) catch |err| switch (err) {
+        error.FileNotFound => try std.Io.Dir.cwd().createFile(io, path, .{ .read = true, .truncate = false }),
         else => return err,
     };
 
-    try file.seekFromEnd(0);
     return file;
 }
 
@@ -270,3 +275,5 @@ test "jsonl file sink exposes status snapshot" {
     try std.testing.expectEqual(@as(?u64, 4096), status.max_bytes);
     try std.testing.expect(!status.degraded);
 }
+
+

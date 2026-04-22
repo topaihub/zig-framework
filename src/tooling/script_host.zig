@@ -324,7 +324,7 @@ test "script host rejects non-zero exit status" {
 }
 
 test "script host logs stderr and emits failure events" {
-    var app_context = try runtime.AppContext.init(std.testing.allocator, .{
+    var app_context = try runtime.AppContext.init(std.testing.allocator, std.Io.Threaded.global_single_threaded.*.io(), .{
         .console_log_enabled = false,
     });
     defer app_context.deinit();
@@ -373,3 +373,5 @@ test "script host logs stderr and emits failure events" {
     }
     try std.testing.expect(saw_stderr_log);
 }
+
+

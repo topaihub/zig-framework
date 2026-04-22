@@ -112,7 +112,8 @@ pub const NativeFileSystem = struct {
 
     pub fn writeFile(_: *NativeFileSystem, path: []const u8, bytes: []const u8) !void {
         if (std.fs.path.dirname(path)) |dir_name| {
-            try std.fs.cwd().makePath(dir_name);
+            const io = std.Io.Threaded.global_single_threaded.*.io();
+            try std.Io.Dir.cwd().createDirPath(io, dir_name);
         }
         var file = try std.fs.cwd().createFile(path, .{ .truncate = true });
         defer file.close();
@@ -157,7 +158,8 @@ pub const NativeFileSystem = struct {
 
     pub fn moveFile(_: *NativeFileSystem, old_path: []const u8, new_path: []const u8) !void {
         if (std.fs.path.dirname(new_path)) |dir_name| {
-            try std.fs.cwd().makePath(dir_name);
+            const io = std.Io.Threaded.global_single_threaded.*.io();
+            try std.Io.Dir.cwd().createDirPath(io, dir_name);
         }
         try std.fs.cwd().rename(old_path, new_path);
     }
@@ -322,3 +324,5 @@ test "native file system moves a file" {
     try std.testing.expectEqualStrings("move", loaded);
     try std.testing.expectError(error.FileNotFound, fs_native.readFileAlloc(std.testing.allocator, old_path, 1024));
 }
+
+

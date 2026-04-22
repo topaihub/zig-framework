@@ -91,8 +91,10 @@ pub const Logger = struct {
             return;
         }
 
+        const io = std.Io.Threaded.global_single_threaded.*.io();
+        const ts = std.Io.Timestamp.now(io, .real);
         var record = LogRecord{
-            .ts_unix_ms = std.time.milliTimestamp(),
+            .ts_unix_ms = @intCast(@divFloor(ts.nanoseconds, 1_000_000)),
             .level = level,
             .kind = kind,
             .subsystem = subsystem_name,
@@ -437,3 +439,5 @@ test "logger tracks dropped default and runtime fields" {
     try std.testing.expect(stats.dropped_default_fields_count >= 1);
     try std.testing.expect(stats.dropped_runtime_fields_count >= 1);
 }
+
+

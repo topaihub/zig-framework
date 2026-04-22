@@ -61,6 +61,7 @@ pub const NativeHttpClient = struct {
     pub const Requester = *const fn (allocator: std.mem.Allocator, request: HttpRequest) anyerror!HttpResponse;
 
     requester: ?Requester = null,
+    io: std.Io,
 
     const vtable = HttpClient.VTable{
         .send = sendErased,
@@ -68,9 +69,10 @@ pub const NativeHttpClient = struct {
         .deinit = null,
     };
 
-    pub fn init(requester: ?Requester) NativeHttpClient {
+    pub fn init(requester: ?Requester, io: std.Io) NativeHttpClient {
         return .{
             .requester = requester,
+            .io = io,
         };
     }
 
@@ -87,7 +89,7 @@ pub const NativeHttpClient = struct {
 
     pub fn send(self: *NativeHttpClient, allocator: std.mem.Allocator, request: HttpRequest) !HttpResponse {
         if (self.requester) |requester| return requester(allocator, request);
-        return sendStd(allocator, request);
+        return sendStd(allocator, self.io, request);
     }
 
     fn sendErased(ptr: *anyopaque, allocator: std.mem.Allocator, request: HttpRequest) anyerror!HttpResponse {
@@ -100,11 +102,11 @@ pub const NativeHttpClient = struct {
     }
 };
 
-fn sendStd(allocator: std.mem.Allocator, request: HttpRequest) !HttpResponse {
-    var client: std.http.Client = .{ .allocator = allocator };
+fn sendStd(allocator: std.mem.Allocator, io: std.Io, request: HttpRequest) !HttpResponse {
+    var client: std.http.Client = .{ .allocator = allocator, .io = io };
     defer client.deinit();
 
-    var headers = std.ArrayListUnmanaged(std.http.Header){};
+    var headers: std.ArrayListUnmanaged(std.http.Header) = .{ .items = &[_]std.http.Header{}, .capacity = 0 };
     defer headers.deinit(allocator);
     for (request.headers) |header| {
         try headers.append(allocator, .{
@@ -116,10 +118,10 @@ fn sendStd(allocator: std.mem.Allocator, request: HttpRequest) !HttpResponse {
     var writer = std.Io.Writer.Allocating.init(allocator);
     defer writer.deinit();
 
-    // Note: std.http.Client in Zig 0.15.2 does not expose a simple end-to-end
-    // per-request timeout control here. The timeout field is still carried in the
-    // request contract so injected requesters or future native implementations can
-    // honor it consistently.
+    // Note: std.http.Client does not expose a simple end-to-end per-request
+    // timeout control here. The timeout field is still carried in the request
+    // contract so injected requesters or future native implementations can honor
+    // it consistently.
     const result = try client.fetch(.{
         .location = .{ .url = request.url },
         .method = request.method.toStd(),
@@ -164,3 +166,5 @@ test "native http client can use injected requester" {
     try std.testing.expectEqual(@as(u16, 201), response.status_code);
     try std.testing.expectEqualStrings("{\"ok\":true}", response.body);
 }
+
+

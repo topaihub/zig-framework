@@ -77,7 +77,7 @@ test "command surface registers tool as command and dispatcher can run it" {
         }
     };
 
-    var app_context = try runtime.AppContext.init(std.testing.allocator, .{
+    var app_context = try runtime.AppContext.init(std.testing.allocator, std.Io.Threaded.global_single_threaded.*.io(), .{
         .console_log_enabled = false,
     });
     defer app_context.deinit();
@@ -144,7 +144,7 @@ test "command surface and direct tool invocation return same output" {
         }
     };
 
-    var app_context = try runtime.AppContext.init(std.testing.allocator, .{
+    var app_context = try runtime.AppContext.init(std.testing.allocator, std.Io.Threaded.global_single_threaded.*.io(), .{
         .console_log_enabled = false,
     });
     defer app_context.deinit();
@@ -208,3 +208,5 @@ test "command surface and direct tool invocation return same output" {
         else => return error.UnexpectedEnvelopeVariant,
     }
 }
+
+

@@ -33,7 +33,7 @@ fn appendRawJsonField(writer: anytype, key: []const u8, value: []const u8, first
     try writer.writeAll(value);
 }
 
-fn writeJsonString(writer: anytype, value: []const u8) anyerror!void {
+fn writeJsonString(writer: *std.Io.Writer, value: []const u8) anyerror!void {
     try writer.writeByte('"');
     for (value) |ch| {
         switch (ch) {
@@ -61,3 +61,5 @@ test "render json event keeps event data shape" {
     try std.testing.expect(std.mem.indexOf(u8, json, "\"seq\":7") != null);
     try std.testing.expect(std.mem.indexOf(u8, json, "\"data\":{\"ok\":true}") != null);
 }
+
+

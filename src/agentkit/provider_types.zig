@@ -58,3 +58,5 @@ test "provider substrate types are stable" {
     try std.testing.expectEqualStrings("ready", health.state.asText());
     try std.testing.expectEqualStrings("demo-model", model.id);
 }
+
+

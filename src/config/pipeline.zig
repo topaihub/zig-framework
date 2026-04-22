@@ -426,7 +426,7 @@ pub const ConfigWritePipeline = struct {
             }
 
             try change_log.append(.{
-                .ts_unix_ms = std.time.milliTimestamp(),
+                .ts_unix_ms = (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); }),
                 .path = change.path,
                 .requires_restart = change.requires_restart,
                 .side_effect_kind = change.side_effect_kind,
@@ -796,3 +796,5 @@ test "config pipeline runs post write hook and exposes summary" {
     try std.testing.expectEqual(@as(usize, 1), post_write_hook.count());
     try std.testing.expectEqual(@as(usize, 1), post_write_hook.records.items[0].changed_count);
 }
+
+

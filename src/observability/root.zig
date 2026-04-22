@@ -39,3 +39,5 @@ test "observability scaffold exports are stable" {
     _ = MemoryObserver;
     _ = MetricsObserver;
 }
+
+

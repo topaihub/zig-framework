@@ -58,3 +58,5 @@ test "effects scaffold exports are stable" {
     try std.testing.expectEqualStrings("native", NativeHttpClient.clientName());
     try std.testing.expectEqualStrings("native", EffectsRuntime.init(.{}).file_system.name());
 }
+
+

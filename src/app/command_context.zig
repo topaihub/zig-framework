@@ -52,3 +52,5 @@ test "command context can read validated params" {
     try std.testing.expect(ctx.param("method") != null);
     try std.testing.expect(ctx.param("missing") == null);
 }
+
+

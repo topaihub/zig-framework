@@ -16,3 +16,5 @@ test "servicekit scaffold exports are stable" {
     try std.testing.expectEqualStrings("servicekit", MODULE_NAME);
     try std.testing.expect(MODULE_STAGE == .scaffold);
 }
+
+

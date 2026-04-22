@@ -73,3 +73,5 @@ test "effect types are stable" {
     try std.testing.expectEqualStrings("EFFECT_TIMEOUT", err.code);
     try std.testing.expect(err.retriable);
 }
+
+

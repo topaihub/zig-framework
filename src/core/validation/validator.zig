@@ -278,7 +278,7 @@ fn unknownFieldDetails(allocator: std.mem.Allocator, definitions: []const FieldD
     return allocator.dupe(u8, buf.items);
 }
 
-fn writeJsonString(writer: anytype, value: []const u8) !void {
+fn writeJsonString(writer: *std.Io.Writer, value: []const u8) !void {
     try writer.writeByte('"');
     for (value) |ch| {
         switch (ch) {
@@ -535,3 +535,5 @@ test "validator infers object array schema when element fields are provided" {
     try std.testing.expectEqualStrings("tools[0].name", report.issues.items[0].path);
     try std.testing.expectEqualStrings("tools[0].id", report.issues.items[1].path);
 }
+
+

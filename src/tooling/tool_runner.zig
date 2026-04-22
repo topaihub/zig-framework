@@ -77,7 +77,7 @@ pub const ToolRunner = struct {
             return error.ToolValidationFailed;
         }
 
-        const started = std.time.milliTimestamp();
+        const started = (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); });
         var fallback_sink = core.logging.MemorySink.init(self.allocator, 1);
         defer fallback_sink.deinit();
         var fallback_logger = core.logging.Logger.init(fallback_sink.asLogSink(), .silent);
@@ -104,7 +104,7 @@ pub const ToolRunner = struct {
         return .{
             .tool_id = try self.allocator.dupe(u8, definition.id),
             .output_json = output_json,
-            .duration_ms = @intCast(std.time.milliTimestamp() - started),
+            .duration_ms = @intCast((blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); }) - started),
         };
     }
 
@@ -116,7 +116,7 @@ pub const ToolRunner = struct {
         const host = self.script_host orelse return error.ScriptHostMissing;
         const spec = definition.script_spec orelse return error.ScriptSpecMissing;
 
-        const started = std.time.milliTimestamp();
+        const started = (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); });
         var fallback_sink = core.logging.MemorySink.init(self.allocator, 1);
         defer fallback_sink.deinit();
         var fallback_logger = core.logging.Logger.init(fallback_sink.asLogSink(), .silent);
@@ -149,7 +149,7 @@ pub const ToolRunner = struct {
         return .{
             .tool_id = try self.allocator.dupe(u8, definition.id),
             .output_json = if (script_result.output_json) |value| try self.allocator.dupe(u8, value) else try self.allocator.dupe(u8, "null"),
-            .duration_ms = @intCast(std.time.milliTimestamp() - started),
+            .duration_ms = @intCast((blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); }) - started),
         };
     }
 
@@ -397,7 +397,7 @@ test "tool runner emits events and logs for native tool execution" {
         }
     };
 
-    var app_context = try runtime.AppContext.init(std.testing.allocator, .{
+    var app_context = try runtime.AppContext.init(std.testing.allocator, std.Io.Threaded.global_single_threaded.*.io(), .{
         .console_log_enabled = false,
     });
     defer app_context.deinit();
@@ -451,3 +451,5 @@ test "tool runner emits events and logs for native tool execution" {
     }
     try std.testing.expect(saw_tool_log);
 }
+
+

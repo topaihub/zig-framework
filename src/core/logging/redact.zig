@@ -147,3 +147,5 @@ test "strict heuristic still redacts broader auth-related fields" {
 
     try std.testing.expectEqualStrings(REDACTED_VALUE, redacted.value.string);
 }
+
+

@@ -3,5 +3,7 @@ const framework = @import("framework");
 
 pub fn main() !void {
     _ = framework;
-    try std.fs.File.stdout().writeAll("framework bootstrap ready\n");
+    try std.Io.File.stdout().writeStreamingAll(std.Io.Threaded.global_single_threaded.*.io(), "framework bootstrap ready\n");
 }
+
+

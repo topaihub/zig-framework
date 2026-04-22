@@ -182,3 +182,5 @@ test "value kind text values stay stable" {
     try std.testing.expectEqualStrings("string", ValueKind.string.asText());
     try std.testing.expectEqualStrings("enum_string", ValueKind.enum_string.asText());
 }
+
+

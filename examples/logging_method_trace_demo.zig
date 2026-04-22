@@ -50,3 +50,5 @@ pub fn main() !void {
     controller.finishSuccess("Ok(200)", false);
     framework.observability.request_trace.complete(&logger, &request_trace, 200, null);
 }
+
+

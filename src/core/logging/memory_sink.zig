@@ -100,7 +100,7 @@ pub const MemorySink = struct {
     records: std.ArrayListUnmanaged(StoredLogRecord) = .empty,
     dropped_records: usize = 0,
     flush_count: usize = 0,
-    mutex: std.Thread.Mutex = .{},
+    mutex: std.atomic.Mutex = .unlocked,
 
     const Self = @This();
 
@@ -119,7 +119,7 @@ pub const MemorySink = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
         for (self.records.items) |*record| {
             record.deinit(self.allocator);
@@ -135,7 +135,7 @@ pub const MemorySink = struct {
     }
 
     pub fn write(self: *Self, record: *const LogRecord) void {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
         self.appendOwnedRecord(record) catch {
             self.dropped_records += 1;
@@ -143,14 +143,14 @@ pub const MemorySink = struct {
     }
 
     pub fn flush(self: *Self) void {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
         self.flush_count += 1;
     }
 
     pub fn count(self: *const Self) usize {
         const mutable_self: *Self = @constCast(@ptrCast(self));
-        mutable_self.mutex.lock();
+        while (!mutable_self.mutex.tryLock()) {}
         defer mutable_self.mutex.unlock();
         return self.records.items.len;
     }
@@ -159,7 +159,7 @@ pub const MemorySink = struct {
     /// Prefer this API in concurrent or long-lived consumers.
     pub fn snapshot(self: *const Self, allocator: std.mem.Allocator) ![]StoredLogRecord {
         const mutable_self: *Self = @constCast(@ptrCast(self));
-        mutable_self.mutex.lock();
+        while (!mutable_self.mutex.tryLock()) {}
         defer mutable_self.mutex.unlock();
 
         const cloned = try allocator.alloc(StoredLogRecord, self.records.items.len);
@@ -179,7 +179,7 @@ pub const MemorySink = struct {
     /// immediate inspection in controlled/testing scenarios.
     pub fn latest(self: *const Self) ?*const StoredLogRecord {
         const mutable_self: *Self = @constCast(@ptrCast(self));
-        mutable_self.mutex.lock();
+        while (!mutable_self.mutex.tryLock()) {}
         defer mutable_self.mutex.unlock();
         if (self.records.items.len == 0) {
             return null;
@@ -191,7 +191,7 @@ pub const MemorySink = struct {
     /// immediate inspection in controlled/testing scenarios.
     pub fn recordAt(self: *const Self, index: usize) ?*const StoredLogRecord {
         const mutable_self: *Self = @constCast(@ptrCast(self));
-        mutable_self.mutex.lock();
+        while (!mutable_self.mutex.tryLock()) {}
         defer mutable_self.mutex.unlock();
         if (index >= self.records.items.len) {
             return null;
@@ -403,3 +403,5 @@ test "memory sink snapshot is safe during concurrent writes" {
     for (threads) |thread| thread.join();
     try std.testing.expect(sink.count() > 0);
 }
+
+

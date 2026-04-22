@@ -29,7 +29,7 @@ pub const LogFieldValue = union(enum) {
     bool: bool,
     null: void,
 
-    pub fn writeJson(self: LogFieldValue, writer: anytype) !void {
+    pub fn writeJson(self: LogFieldValue, writer: *std.Io.Writer) !void {
         switch (self) {
             .string => |value| try writeJsonString(writer, value),
             .int => |value| try writer.print("{}", .{value}),
@@ -84,7 +84,7 @@ pub const LogField = struct {
         return next;
     }
 
-    pub fn writeJson(self: LogField, writer: anytype) !void {
+    pub fn writeJson(self: LogField, writer: *std.Io.Writer) !void {
         try writer.writeByte('{');
         try writeJsonString(writer, "key");
         try writer.writeByte(':');
@@ -114,7 +114,7 @@ pub const LogRecord = struct {
     duration_ms: ?u64 = null,
     fields: []const LogField = &.{},
 
-    pub fn writeJson(self: *const LogRecord, writer: anytype) !void {
+    pub fn writeJson(self: *const LogRecord, writer: *std.Io.Writer) !void {
         try writer.writeByte('{');
 
         var first = true;
@@ -175,7 +175,7 @@ fn writeNumberField(writer: anytype, first: *bool, key: []const u8, value: anyty
     try writer.print("{}", .{value});
 }
 
-fn writeJsonString(writer: anytype, value: []const u8) !void {
+fn writeJsonString(writer: *std.Io.Writer, value: []const u8) !void {
     try writer.writeByte('"');
     for (value) |ch| {
         switch (ch) {
@@ -201,13 +201,13 @@ test "log field values serialize to json scalars" {
     defer buf.deinit(std.testing.allocator);
 
     const writer = buf.writer(std.testing.allocator);
-    try LogField.string("path", "gateway.port").writeJson(writer);
+    try LogField.string("path", "gateway.port").writeJson(&writer);
     try buf.append(std.testing.allocator, '\n');
-    try LogField.boolean("retryable", true).writeJson(writer);
+    try LogField.boolean("retryable", true).writeJson(&writer);
     try buf.append(std.testing.allocator, '\n');
-    try LogField.int("attempt", 3).writeJson(writer);
+    try LogField.int("attempt", 3).writeJson(&writer);
     try buf.append(std.testing.allocator, '\n');
-    try LogField.sensitiveString("token", "secret").writeJson(writer);
+    try LogField.sensitiveString("token", "secret").writeJson(&writer);
 
     try std.testing.expect(std.mem.indexOf(u8, buf.items, "\"key\":\"path\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, buf.items, "\"value\":\"gateway.port\"") != null);
@@ -248,3 +248,5 @@ test "log record json contains core structured fields" {
     try std.testing.expect(std.mem.indexOf(u8, buf.items, "\"errorCode\":\"CONFIG_WRITE_FAILED\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, buf.items, "\"fields\":[") != null);
 }
+
+

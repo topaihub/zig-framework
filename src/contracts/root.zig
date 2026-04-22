@@ -21,3 +21,5 @@ test "contracts scaffold exports are stable" {
     try std.testing.expect(accepted.accepted);
     _ = capability_manifest.CapabilityManifest{};
 }
+
+

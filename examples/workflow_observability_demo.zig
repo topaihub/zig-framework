@@ -60,3 +60,5 @@ pub fn main() !void {
 
     framework.observability.request_trace.complete(app_context.logger, &request_trace, 200, null);
 }
+
+

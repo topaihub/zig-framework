@@ -34,7 +34,7 @@ pub fn writeCapabilityManifestJson(writer: anytype, manifest: contracts.capabili
     try writer.writeByte('}');
 }
 
-fn writeJsonString(writer: anytype, value: []const u8) anyerror!void {
+fn writeJsonString(writer: *std.Io.Writer, value: []const u8) anyerror!void {
     try writer.writeByte('"');
     for (value) |ch| {
         switch (ch) {
@@ -75,3 +75,5 @@ test "runtime helper renders capability manifest json" {
     try std.testing.expect(std.mem.indexOf(u8, json, "\"adapters\":[\"cli\",\"http\"]") != null);
     try std.testing.expect(std.mem.indexOf(u8, json, "\"supportsAsyncTasks\":true") != null);
 }
+
+

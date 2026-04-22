@@ -21,3 +21,5 @@ test "core scaffold exports are stable" {
     try std.testing.expectEqualStrings("logging", logging.MODULE_NAME);
     try std.testing.expectEqualStrings("validation", validation.MODULE_NAME);
 }
+
+

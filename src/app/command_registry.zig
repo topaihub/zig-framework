@@ -115,3 +115,5 @@ test "command registry rejects duplicate method" {
         .method = "app.meta",
     }));
 }
+
+

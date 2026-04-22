@@ -41,7 +41,7 @@ pub const SummaryTrace = struct {
             .logger = logger,
             .method_name = try allocator.dupe(u8, method_name),
             .threshold_ms = threshold_ms,
-            .started_at_ms = std.time.milliTimestamp(),
+            .started_at_ms = (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); }),
         };
     }
 
@@ -57,7 +57,7 @@ pub const SummaryTrace = struct {
         if (self.completed) return;
         self.completed = true;
 
-        const elapsed_ms: u64 = @intCast(@max(0, std.time.milliTimestamp() - self.started_at_ms));
+        const elapsed_ms: u64 = @intCast(@max(0, (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); }) - self.started_at_ms));
         const beyond_threshold = if (self.threshold_ms) |threshold| elapsed_ms > threshold else false;
 
         const fields = [_]LogField{
@@ -99,3 +99,5 @@ test "summary trace emits ME/RT/BT/ET data" {
     try std.testing.expectEqualStrings("Auth.Login", record.fields[0].value.string);
     try std.testing.expectEqualStrings("N", record.fields[3].value.string);
 }
+
+

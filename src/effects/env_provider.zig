@@ -113,3 +113,5 @@ test "native env provider supports required and has queries" {
     try std.testing.expect(value.len > 0);
     try std.testing.expect(provider.has(key));
 }
+
+

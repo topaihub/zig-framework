@@ -114,7 +114,7 @@ test "repo health check supports direct tool execution" {
 }
 
 test "repo health check supports command surface execution" {
-    var app_context = try framework.AppContext.init(std.testing.allocator, .{
+    var app_context = try framework.AppContext.init(std.testing.allocator, std.Io.Threaded.global_single_threaded.*.io(), .{
         .console_log_enabled = false,
     });
     defer app_context.deinit();
@@ -182,3 +182,5 @@ test "repo health check supports command surface execution" {
         else => return error.UnexpectedEnvelopeVariant,
     }
 }
+
+

@@ -52,13 +52,15 @@ pub const JsonlFileObserver = struct {
     }
 
     fn recordInternal(self: *Self, topic: []const u8, payload_json: []const u8) anyerror!void {
-        var rendered: std.ArrayListUnmanaged(u8) = .empty;
+        var managed = std.array_list.Managed(u8).init(self.allocator);
+        var rendered = managed.moveToUnmanaged();
         defer rendered.deinit(self.allocator);
-
-        const writer = rendered.writer(self.allocator);
+        var writer = std.Io.Writer.fromArrayList(&rendered);
         try writer.writeAll("{\"topic\":");
-        try writeJsonString(writer, topic);
-        try writer.print(",\"tsUnixMs\":{d},\"payload\":", .{std.time.milliTimestamp()});
+        try writeJsonString(&writer, topic);
+        const io = std.Io.Threaded.global_single_threaded.*.io();
+        const ts = std.Io.Timestamp.now(io, .real);
+        try writer.print(",\"tsUnixMs\":{d},\"payload\":", .{@divFloor(ts.nanoseconds, 1_000_000)});
         try writer.writeAll(payload_json);
         try writer.writeAll("}\n");
 
@@ -71,9 +73,10 @@ pub const JsonlFileObserver = struct {
 
         try ensureParentDirectory(self.path);
         var file = try openAppendFile(self.path);
-        defer file.close();
+        const io_write = std.Io.Threaded.global_single_threaded.*.io();
+        defer file.close(io_write);
 
-        try file.writeAll(rendered.items);
+        try file.writeStreamingAll(io_write, rendered.items);
         self.current_bytes += rendered.items.len;
     }
 
@@ -89,26 +92,28 @@ pub const JsonlFileObserver = struct {
 };
 
 fn currentSize(path: []const u8) u64 {
-    const stat = std.fs.cwd().statFile(path) catch return 0;
+    const io = std.Io.Threaded.global_single_threaded.*.io();
+    const stat = std.Io.Dir.cwd().statFile(io, path, .{}) catch return 0;
     return stat.size;
 }
 
 fn ensureParentDirectory(path: []const u8) anyerror!void {
     if (std.fs.path.dirname(path)) |dir_name| {
-        try std.fs.cwd().makePath(dir_name);
+        const io = std.Io.Threaded.global_single_threaded.*.io();
+        try std.Io.Dir.cwd().createDirPath(io, dir_name);
     }
 }
 
-fn openAppendFile(path: []const u8) anyerror!std.fs.File {
-    var file = std.fs.cwd().openFile(path, .{ .mode = .read_write }) catch |err| switch (err) {
-        error.FileNotFound => try std.fs.cwd().createFile(path, .{ .read = true, .truncate = false }),
+fn openAppendFile(path: []const u8) anyerror!std.Io.File {
+    const io = std.Io.Threaded.global_single_threaded.*.io();
+    const file = std.Io.Dir.cwd().openFile(io, path, .{ .mode = .read_write }) catch |err| switch (err) {
+        error.FileNotFound => try std.Io.Dir.cwd().createFile(io, path, .{ .read = true, .truncate = false }),
         else => return err,
     };
-    try file.seekFromEnd(0);
     return file;
 }
 
-fn writeJsonString(writer: anytype, value: []const u8) anyerror!void {
+fn writeJsonString(writer: *std.Io.Writer, value: []const u8) anyerror!void {
     try writer.writeByte('"');
     for (value) |ch| {
         switch (ch) {
@@ -150,3 +155,5 @@ test "jsonl file observer writes observer events" {
     try std.testing.expectEqual(@as(usize, 1), observer.flush_count);
     try std.testing.expect(std.mem.indexOf(u8, contents, "\"topic\":\"task.succeeded\"") != null);
 }
+
+

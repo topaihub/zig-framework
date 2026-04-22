@@ -69,7 +69,7 @@ pub const AppContext = struct {
 
     const Self = @This();
 
-    pub fn init(allocator: std.mem.Allocator, config: AppBootstrapConfig) anyerror!Self {
+    pub fn init(allocator: std.mem.Allocator, io: std.Io, config: AppBootstrapConfig) anyerror!Self {
         const memory_sink = try allocator.create(MemorySink);
         errdefer allocator.destroy(memory_sink);
         memory_sink.* = MemorySink.init(allocator, config.memory_log_capacity);
@@ -86,7 +86,7 @@ pub const AppContext = struct {
         if (config.log_file_path) |log_file_path| {
             const instance = try allocator.create(JsonlFileSink);
             errdefer allocator.destroy(instance);
-            instance.* = try JsonlFileSink.init(allocator, log_file_path, config.log_file_max_bytes);
+            instance.* = try JsonlFileSink.init(allocator, log_file_path, config.log_file_max_bytes, io);
             logger_file_sink = instance;
         }
 
@@ -294,7 +294,7 @@ pub const AppContext = struct {
 };
 
 test "app context initializes and exposes assembled runtime services" {
-    var app_context = try AppContext.init(std.testing.allocator, .{});
+    var app_context = try AppContext.init(std.testing.allocator, std.Io.Threaded.global_single_threaded.*.io(), .{});
     defer app_context.deinit();
 
     try std.testing.expect(app_context.command_registry.count() == 0);
@@ -303,7 +303,7 @@ test "app context initializes and exposes assembled runtime services" {
 }
 
 test "app context can wire console logger sink when enabled" {
-    var app_context = try AppContext.init(std.testing.allocator, .{
+    var app_context = try AppContext.init(std.testing.allocator, std.Io.Threaded.global_single_threaded.*.io(), .{
         .console_log_enabled = true,
         .console_log_style = .pretty,
     });
@@ -320,7 +320,7 @@ test "app context can dispatch commands through assembled dependencies" {
         }
     };
 
-    var app_context = try AppContext.init(std.testing.allocator, .{});
+    var app_context = try AppContext.init(std.testing.allocator, std.Io.Threaded.global_single_threaded.*.io(), .{});
     defer app_context.deinit();
 
     try app_context.registerCommand(.{
@@ -343,7 +343,7 @@ test "app context can dispatch commands through assembled dependencies" {
 }
 
 test "app context can build config pipeline with shared stores" {
-    var app_context = try AppContext.init(std.testing.allocator, .{});
+    var app_context = try AppContext.init(std.testing.allocator, std.Io.Threaded.global_single_threaded.*.io(), .{});
     defer app_context.deinit();
 
     const fields = [_]FieldDefinition{
@@ -360,3 +360,5 @@ test "app context can build config pipeline with shared stores" {
     try std.testing.expectEqual(@as(usize, 1), app_context.config_change_log.count());
     try std.testing.expectEqual(@as(usize, 1), app_context.config_side_effects.count());
 }
+
+

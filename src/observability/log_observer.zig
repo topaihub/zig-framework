@@ -12,7 +12,7 @@ pub const LogObserver = struct {
     subsystem_len: usize = 0,
     record_count: usize = 0,
     flush_count: usize = 0,
-    mutex: std.Thread.Mutex = .{},
+    mutex: std.atomic.Mutex = .unlocked,
 
     const Self = @This();
 
@@ -35,7 +35,7 @@ pub const LogObserver = struct {
     }
 
     pub fn record(self: *Self, topic: []const u8, payload_json: []const u8) anyerror!void {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         self.record_count += 1;
         self.mutex.unlock();
         self.logger.child(self.subsystem()).info("observer event", &.{
@@ -45,7 +45,7 @@ pub const LogObserver = struct {
     }
 
     pub fn flush(self: *Self) anyerror!void {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         self.flush_count += 1;
         self.mutex.unlock();
         self.logger.flush();
@@ -89,3 +89,5 @@ test "log observer bridges observer events into logger" {
     try std.testing.expectEqualStrings("observer", sink.latest().?.subsystem);
     try std.testing.expectEqualStrings("observer event", sink.latest().?.message);
 }
+
+

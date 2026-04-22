@@ -42,3 +42,5 @@ test "log level filtering follows severity order" {
     try std.testing.expect(!LogLevel.warn.allows(.debug));
     try std.testing.expect(!LogLevel.silent.allows(.fatal));
 }
+
+

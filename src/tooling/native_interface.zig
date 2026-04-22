@@ -91,3 +91,5 @@ test "native tool helper builds definition and executes through handler" {
     defer std.testing.allocator.free(output);
     try std.testing.expectEqualStrings("{\"via\":\"helper\"}", output);
 }
+
+

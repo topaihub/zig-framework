@@ -33,3 +33,5 @@ test "app scaffold exports are stable" {
     try std.testing.expectEqualStrings("cli", @tagName(RequestSource.cli));
     try std.testing.expectEqualStrings("public", Authority.public.asText());
 }
+
+

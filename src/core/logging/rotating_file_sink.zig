@@ -26,9 +26,9 @@ pub const RotatingFileSinkConfig = struct {
 pub const RotatingFileSink = struct {
     allocator: std.mem.Allocator,
     config: RotatingFileSinkConfig,
-    mutex: std.Thread.Mutex = .{},
+    mutex: std.atomic.Mutex = .unlocked,
     current_date: [10]u8 = .{0} ** 10,
-    current_file: ?std.fs.File = null,
+    current_file: ?std.Io.File = null,
     current_size: u64 = 0,
     current_part: u32 = 0,
     total_records: u64 = 0,
@@ -37,14 +37,18 @@ pub const RotatingFileSink = struct {
     const Self = @This();
 
     pub fn init(allocator: std.mem.Allocator, cfg: RotatingFileSinkConfig) Self {
-        std.fs.cwd().makePath(cfg.log_dir) catch {};
+        const io = std.Io.Threaded.global_single_threaded.*.io();
+        std.Io.Dir.cwd().createDirPath(io, cfg.log_dir) catch {};
         return .{ .allocator = allocator, .config = cfg };
     }
 
     pub fn deinit(self: *Self) void {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
-        if (self.current_file) |*f| f.close();
+        if (self.current_file) |*f| {
+            const io = std.Io.Threaded.global_single_threaded.*.io();
+            f.close(io);
+        }
         self.current_file = null;
     }
 
@@ -53,7 +57,7 @@ pub const RotatingFileSink = struct {
     }
 
     pub fn status(self: *Self) RotatingFileSinkStatus {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
         return .{
             .total_records = self.total_records,
@@ -88,23 +92,24 @@ pub const RotatingFileSink = struct {
     }
 
     fn writeRecord(self: *Self, rec: *const LogRecord) void {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) {}
         defer self.mutex.unlock();
 
         // Render log line
-        var buf: std.ArrayListUnmanaged(u8) = .empty;
+        var managed = std.array_list.Managed(u8).init(self.allocator);
+        var buf = managed.moveToUnmanaged();
         defer buf.deinit(self.allocator);
+        var w = std.Io.Writer.fromArrayList(&buf);
 
         switch (self.config.format) {
             .json => {
-                rec.writeJson(buf.writer(self.allocator)) catch {
+                rec.writeJson(&w) catch {
                     self.dropped_records += 1;
                     return;
                 };
             },
             .text => {
                 // Format: YYYY-MM-DD HH:MM:SS LEVEL subsystem: message key=value
-                const w = buf.writer(self.allocator);
                 // Timestamp
                 const ts_secs: u64 = @intCast(if (rec.ts_unix_ms > 0) @divTrunc(rec.ts_unix_ms, 1000) else 0);
                 const ts_rem: u64 = @intCast(if (rec.ts_unix_ms > 0) @rem(rec.ts_unix_ms, 1000) else 0);
@@ -114,35 +119,35 @@ pub const RotatingFileSink = struct {
                 const hh = sod / 3600;
                 const mm = @rem(sod, 3600) / 60;
                 const ss = @rem(sod, 60);
-                std.fmt.format(w, "{s} {d:0>2}:{d:0>2}:{d:0>2}.{d:0>3} {s}", .{ d_buf, hh, mm, ss, ts_rem, rec.level.asText() }) catch {
+                w.print("{s} {d:0>2}:{d:0>2}:{d:0>2}.{d:0>3} {s}", .{ d_buf, hh, mm, ss, ts_rem, rec.level.asText() }) catch {
                     self.dropped_records += 1;
                     return;
                 };
                 // Subsystem
                 if (rec.subsystem.len > 0) {
-                    std.fmt.format(w, " {s}:", .{rec.subsystem}) catch {};
+                    w.print(" {s}:", .{rec.subsystem}) catch {};
                 }
                 // Message
-                std.fmt.format(w, " {s}", .{rec.message}) catch {};
+                w.print(" {s}", .{rec.message}) catch {};
                 // Trace context
                 if (rec.trace_id) |tid| {
-                    std.fmt.format(w, " trace_id={s}", .{tid}) catch {};
+                    w.print(" trace_id={s}", .{tid}) catch {};
                 }
                 if (rec.request_id) |rid| {
-                    std.fmt.format(w, " request_id={s}", .{rid}) catch {};
+                    w.print(" request_id={s}", .{rid}) catch {};
                 }
                 if (rec.span_id) |sid| {
-                    std.fmt.format(w, " span_id={s}", .{sid}) catch {};
+                    w.print(" span_id={s}", .{sid}) catch {};
                 }
                 // Fields
                 for (rec.fields) |field| {
-                    std.fmt.format(w, " {s}=", .{field.key}) catch {};
+                    w.print(" {s}=", .{field.key}) catch {};
                     switch (field.value) {
-                        .string => |s| std.fmt.format(w, "{s}", .{s}) catch {},
-                        .int => |i| std.fmt.format(w, "{d}", .{i}) catch {},
-                        .uint => |u| std.fmt.format(w, "{d}", .{u}) catch {},
-                        .float => |f| std.fmt.format(w, "{d:.2}", .{f}) catch {},
-                        .bool => |b| std.fmt.format(w, "{}", .{b}) catch {},
+                        .string => |s| w.print("{s}", .{s}) catch {},
+                        .int => |i| w.print("{d}", .{i}) catch {},
+                        .uint => |u| w.print("{d}", .{u}) catch {},
+                        .float => |f| w.print("{d:.2}", .{f}) catch {},
+                        .bool => |b| w.print("{}", .{b}) catch {},
                         .null => {},
                     }
                 }
@@ -154,8 +159,9 @@ pub const RotatingFileSink = struct {
         };
 
         // Get today's date
-        const ts = std.time.timestamp();
-        const epoch_secs: u64 = @intCast(if (ts > 0) ts else 0);
+        const io = std.Io.Threaded.global_single_threaded.*.io();
+        const ts = std.Io.Timestamp.now(io, .real);
+        const epoch_secs: u64 = @intCast(@divFloor(ts.nanoseconds, std.time.ns_per_s));
         var date_buf: [10]u8 = undefined;
         epochToDate(epoch_secs, &date_buf);
 
@@ -164,7 +170,10 @@ pub const RotatingFileSink = struct {
         const size_exceeded = self.current_size + buf.items.len > self.config.max_file_bytes;
 
         if (self.current_file == null or date_changed or size_exceeded) {
-            if (self.current_file) |*f| f.close();
+            if (self.current_file) |*f| {
+                const io_close = std.Io.Threaded.global_single_threaded.*.io();
+                f.close(io_close);
+            }
 
             if (date_changed) {
                 @memcpy(&self.current_date, &date_buf);
@@ -185,25 +194,28 @@ pub const RotatingFileSink = struct {
                     self.config.log_dir, self.config.prefix, self.current_date, self.current_part,
                 }) catch return;
 
-            std.fs.cwd().makePath(self.config.log_dir) catch {};
-            const file = std.fs.cwd().createFile(path, .{ .truncate = false }) catch {
+            const io_local = std.Io.Threaded.global_single_threaded.*.io();
+            std.Io.Dir.cwd().createDirPath(io_local, self.config.log_dir) catch {};
+            const file = std.Io.Dir.cwd().createFile(io_local, path, .{ .truncate = false }) catch {
                 self.dropped_records += 1;
                 return;
             };
             // Seek to end for append
-            const stat = file.stat() catch {
-                file.close();
+            const io_stat = std.Io.Threaded.global_single_threaded.*.io();
+            const stat = file.stat(io_stat) catch {
+                const io_close2 = std.Io.Threaded.global_single_threaded.*.io();
+                file.close(io_close2);
                 self.dropped_records += 1;
                 return;
             };
-            file.seekTo(stat.size) catch {};
             self.current_size = stat.size;
             self.current_file = file;
         }
 
         // Write
         if (self.current_file) |f| {
-            f.writeAll(buf.items) catch {
+            const io_write = std.Io.Threaded.global_single_threaded.*.io();
+            f.writeStreamingAll(io_write, buf.items) catch {
                 self.dropped_records += 1;
                 return;
             };
@@ -273,3 +285,5 @@ test "rotating file sink init and status" {
     try std.testing.expectEqual(@as(u64, 0), st.total_records);
     try std.testing.expectEqual(@as(u64, 0), st.dropped_records);
 }
+
+

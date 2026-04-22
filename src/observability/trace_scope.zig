@@ -37,3 +37,5 @@ test "trace scope stores and clears current context" {
     clear();
     try @import("std").testing.expect(current().trace_id == null);
 }
+
+

@@ -18,7 +18,7 @@ pub const MethodTrace = struct {
             .logger = logger,
             .method_name = try allocator.dupe(u8, method_name),
             .threshold_ms = threshold_ms,
-            .started_at_ms = std.time.milliTimestamp(),
+            .started_at_ms = (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); }),
         };
         errdefer trace.deinit();
 
@@ -39,7 +39,7 @@ pub const MethodTrace = struct {
     pub fn finishSuccess(self: *MethodTrace, result_summary: []const u8, is_async: bool) void {
         if (self.completed) return;
         self.completed = true;
-        const elapsed_ms: u64 = @intCast(@max(0, std.time.milliTimestamp() - self.started_at_ms));
+        const elapsed_ms: u64 = @intCast(@max(0, (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); }) - self.started_at_ms));
         const beyond_threshold = if (self.threshold_ms) |threshold| elapsed_ms > threshold else false;
 
         var fields: [7]LogField = undefined;
@@ -70,7 +70,7 @@ pub const MethodTrace = struct {
     pub fn finishError(self: *MethodTrace, exception_type: []const u8, error_code: ?[]const u8, is_async: bool) void {
         if (self.completed) return;
         self.completed = true;
-        const elapsed_ms: u64 = @intCast(@max(0, std.time.milliTimestamp() - self.started_at_ms));
+        const elapsed_ms: u64 = @intCast(@max(0, (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); }) - self.started_at_ms));
 
         var fields: [7]LogField = undefined;
         var count: usize = 0;
@@ -112,3 +112,5 @@ test "method trace emits entry and exit logs" {
     try std.testing.expectEqualStrings("ENTRY", memory_sink.recordAt(0).?.message);
     try std.testing.expectEqualStrings("EXIT", memory_sink.recordAt(1).?.message);
 }
+
+

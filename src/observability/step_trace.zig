@@ -20,7 +20,7 @@ pub const StepTrace = struct {
             .subsystem = try allocator.dupe(u8, subsystem),
             .step = try allocator.dupe(u8, step),
             .threshold_ms = threshold_ms,
-            .started_at_ms = std.time.milliTimestamp(),
+            .started_at_ms = (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); }),
         };
         errdefer trace.deinit();
         trace.logStarted();
@@ -31,7 +31,7 @@ pub const StepTrace = struct {
         if (self.completed) return;
         self.completed = true;
 
-        const elapsed_ms: u64 = @intCast(@max(0, std.time.milliTimestamp() - self.started_at_ms));
+        const elapsed_ms: u64 = @intCast(@max(0, (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); }) - self.started_at_ms));
         const beyond_threshold = if (self.threshold_ms) |threshold| elapsed_ms > threshold else false;
 
         var fields: [5]LogField = undefined;
@@ -104,3 +104,5 @@ test "step trace warns on threshold or error" {
 
     try std.testing.expect(memory_sink.latest().?.level == .warn);
 }
+
+

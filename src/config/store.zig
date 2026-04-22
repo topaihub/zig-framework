@@ -276,7 +276,7 @@ pub const StoredValue = union(enum) {
                     if (index > 0) {
                         try writer.writeByte(',');
                     }
-                    try item.writeJson(writer);
+                    try item.writeJson(&writer);
                 }
                 try writer.writeByte(']');
             },
@@ -433,7 +433,7 @@ fn writeValidationValueJson(writer: anytype, value: ValidationValue) anyerror!vo
     }
 }
 
-fn writeJsonString(writer: anytype, value: []const u8) anyerror!void {
+fn writeJsonString(writer: *std.Io.Writer, value: []const u8) anyerror!void {
     try writer.writeByte('"');
     for (value) |ch| {
         switch (ch) {
@@ -571,3 +571,5 @@ test "memory config change log stores copied entries" {
     try std.testing.expectEqual(@as(usize, 1), change_log.count());
     try std.testing.expectEqualStrings("gateway.port", change_log.entries.items[0].path);
 }
+
+

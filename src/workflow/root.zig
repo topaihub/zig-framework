@@ -27,3 +27,5 @@ test "workflow scaffold exports are stable" {
     try std.testing.expect(MODULE_STAGE == .scaffold);
     try std.testing.expectEqualStrings("succeeded", WorkflowStatus.succeeded.asText());
 }
+
+

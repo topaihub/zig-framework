@@ -95,3 +95,5 @@ test "array list sink records writes and flushes" {
     try std.testing.expectEqualStrings("hello", output);
     try std.testing.expectEqual(@as(usize, 1), sink.flush_count);
 }
+
+

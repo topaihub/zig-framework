@@ -215,3 +215,5 @@ test "framework module scaffold exports are available" {
     try std.testing.expectEqualStrings("CORE_INTERNAL_ERROR", core.error_model.code.CORE_INTERNAL_ERROR);
     try std.testing.expectEqualStrings("logging", core.logging.MODULE_NAME);
 }
+
+

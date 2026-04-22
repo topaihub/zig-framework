@@ -31,7 +31,7 @@ pub const ScriptMarkdownFetchTool = struct {
 };
 
 test "script markdown fetch supports direct tool execution" {
-    var app_context = try framework.AppContext.init(std.testing.allocator, .{
+    var app_context = try framework.AppContext.init(std.testing.allocator, std.Io.Threaded.global_single_threaded.*.io(), .{
         .console_log_enabled = false,
     });
     defer app_context.deinit();
@@ -75,7 +75,7 @@ test "script markdown fetch supports direct tool execution" {
 }
 
 test "script markdown fetch supports command surface execution" {
-    var app_context = try framework.AppContext.init(std.testing.allocator, .{
+    var app_context = try framework.AppContext.init(std.testing.allocator, std.Io.Threaded.global_single_threaded.*.io(), .{
         .console_log_enabled = false,
     });
     defer app_context.deinit();
@@ -143,3 +143,5 @@ test "script markdown fetch supports command surface execution" {
         else => return error.UnexpectedEnvelopeVariant,
     }
 }
+
+

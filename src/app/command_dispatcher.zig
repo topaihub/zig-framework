@@ -225,7 +225,7 @@ pub const CommandDispatcher = struct {
     }
 
     pub fn dispatch(self: *const Self, request: CommandRequest, confirm_risk: bool) anyerror!CommandEnvelope {
-        const started_at_ms = std.time.milliTimestamp();
+        const started_at_ms = (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); });
         self.logInfo("command received", request, null, null);
         try self.emitCommandEvent("command.started", request, null, null, null, null);
 
@@ -541,7 +541,7 @@ pub const CommandDispatcher = struct {
 };
 
 fn elapsedSince(started_at_ms: i64) u64 {
-    const now = std.time.milliTimestamp();
+    const now = (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); });
     if (now <= started_at_ms) {
         return 0;
     }
@@ -590,7 +590,7 @@ fn appendJsonStringField(writer: anytype, key: []const u8, value: []const u8, fi
     try writeJsonString(writer, value);
 }
 
-fn writeJsonString(writer: anytype, value: []const u8) anyerror!void {
+fn writeJsonString(writer: *std.Io.Writer, value: []const u8) anyerror!void {
     try writer.writeByte('"');
     for (value) |ch| {
         switch (ch) {
@@ -850,3 +850,5 @@ test "command dispatcher maps handler failure to shared app error" {
     try std.testing.expect(!envelope.ok);
     try std.testing.expectEqualStrings(core.error_model.code.CORE_TIMEOUT, envelope.app_error.?.code);
 }
+
+

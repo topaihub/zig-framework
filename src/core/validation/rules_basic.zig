@@ -283,7 +283,7 @@ fn enumDetails(allocator: std.mem.Allocator, allowed: []const []const u8, actual
     return allocator.dupe(u8, buf.items);
 }
 
-fn writeJsonString(writer: anytype, value: []const u8) !void {
+fn writeJsonString(writer: *std.Io.Writer, value: []const u8) !void {
     try writer.writeByte('"');
     for (value) |ch| {
         switch (ch) {
@@ -373,3 +373,5 @@ test "basic rules include structured details for enum violations" {
     try std.testing.expect(report.issues.items[0].details_json != null);
     try std.testing.expect(std.mem.indexOf(u8, report.issues.items[0].details_json.?, "\"allowed\":[\"openai\",\"anthropic\"]") != null);
 }
+
+

@@ -78,3 +78,5 @@ test "multi observer fans out events" {
     try std.testing.expectEqual(@as(usize, 1), first.count());
     try std.testing.expectEqual(@as(usize, 1), second.count());
 }
+
+
