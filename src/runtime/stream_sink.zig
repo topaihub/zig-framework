@@ -52,7 +52,7 @@ pub const ArrayListSink = struct {
     }
 };
 
-pub fn netStreamSink(stream: *std.net.Stream) ByteSink {
+pub fn netStreamSink(stream: *std.Io.net.Stream) ByteSink {
     return .{
         .ptr = @ptrCast(stream),
         .write_all = writeNetStream,
@@ -60,7 +60,7 @@ pub fn netStreamSink(stream: *std.net.Stream) ByteSink {
     };
 }
 
-pub fn fileSink(file: *std.fs.File) ByteSink {
+pub fn fileSink(file: *std.Io.File) ByteSink {
     return .{
         .ptr = @ptrCast(file),
         .write_all = writeFile,
@@ -69,15 +69,20 @@ pub fn fileSink(file: *std.fs.File) ByteSink {
 }
 
 fn writeNetStream(ptr: *anyopaque, bytes: []const u8) anyerror!void {
-    const stream: *std.net.Stream = @ptrCast(@alignCast(ptr));
-    try stream.writeAll(bytes);
+    const stream: *std.Io.net.Stream = @ptrCast(@alignCast(ptr));
+    const io = std.Io.Threaded.global_single_threaded.*.io();
+    var buf: [4096]u8 = undefined;
+    var w = stream.writer(io, &buf);
+    try w.interface.writeAll(bytes);
+    try w.interface.flush();
 }
 
 fn flushNetStream(_: *anyopaque) anyerror!void {}
 
 fn writeFile(ptr: *anyopaque, bytes: []const u8) anyerror!void {
-    const file: *std.fs.File = @ptrCast(@alignCast(ptr));
-    try file.writeAll(bytes);
+    const file: *std.Io.File = @ptrCast(@alignCast(ptr));
+    const io = std.Io.Threaded.global_single_threaded.*.io();
+    try file.writeStreamingAll(io, bytes);
 }
 
 fn flushFile(_: *anyopaque) anyerror!void {}

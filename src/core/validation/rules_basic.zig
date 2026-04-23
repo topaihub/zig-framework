@@ -202,20 +202,19 @@ fn lengthDetails(allocator: std.mem.Allocator, min: ?usize, max: ?usize, actual:
     var buf: std.ArrayListUnmanaged(u8) = .empty;
     defer buf.deinit(allocator);
 
-    const writer = buf.writer(allocator);
-    try writer.writeAll("{\"min\":");
+    try buf.appendSlice(allocator, "{\"min\":");
     if (min) |value| {
-        try writer.print("{d}", .{value});
+        try buf.print(allocator, "{d}", .{value});
     } else {
-        try writer.writeAll("null");
+        try buf.appendSlice(allocator, "null");
     }
-    try writer.writeAll(",\"max\":");
+    try buf.appendSlice(allocator, ",\"max\":");
     if (max) |value| {
-        try writer.print("{d}", .{value});
+        try buf.print(allocator, "{d}", .{value});
     } else {
-        try writer.writeAll("null");
+        try buf.appendSlice(allocator, "null");
     }
-    try writer.print(",\"actual\":{d}}}", .{actual});
+    try buf.print(allocator, ",\"actual\":{d}}}", .{actual});
 
     return allocator.dupe(u8, buf.items);
 }
@@ -224,20 +223,19 @@ fn intRangeDetails(allocator: std.mem.Allocator, min: ?i64, max: ?i64, actual: i
     var buf: std.ArrayListUnmanaged(u8) = .empty;
     defer buf.deinit(allocator);
 
-    const writer = buf.writer(allocator);
-    try writer.writeAll("{\"min\":");
+    try buf.appendSlice(allocator, "{\"min\":");
     if (min) |value| {
-        try writer.print("{d}", .{value});
+        try buf.print(allocator, "{d}", .{value});
     } else {
-        try writer.writeAll("null");
+        try buf.appendSlice(allocator, "null");
     }
-    try writer.writeAll(",\"max\":");
+    try buf.appendSlice(allocator, ",\"max\":");
     if (max) |value| {
-        try writer.print("{d}", .{value});
+        try buf.print(allocator, "{d}", .{value});
     } else {
-        try writer.writeAll("null");
+        try buf.appendSlice(allocator, "null");
     }
-    try writer.print(",\"actual\":{d}}}", .{actual});
+    try buf.print(allocator, ",\"actual\":{d}}}", .{actual});
 
     return allocator.dupe(u8, buf.items);
 }
@@ -246,20 +244,19 @@ fn floatRangeDetails(allocator: std.mem.Allocator, min: ?f64, max: ?f64, actual:
     var buf: std.ArrayListUnmanaged(u8) = .empty;
     defer buf.deinit(allocator);
 
-    const writer = buf.writer(allocator);
-    try writer.writeAll("{\"min\":");
+    try buf.appendSlice(allocator, "{\"min\":");
     if (min) |value| {
-        try writer.print("{d}", .{value});
+        try buf.print(allocator, "{d}", .{value});
     } else {
-        try writer.writeAll("null");
+        try buf.appendSlice(allocator, "null");
     }
-    try writer.writeAll(",\"max\":");
+    try buf.appendSlice(allocator, ",\"max\":");
     if (max) |value| {
-        try writer.print("{d}", .{value});
+        try buf.print(allocator, "{d}", .{value});
     } else {
-        try writer.writeAll("null");
+        try buf.appendSlice(allocator, "null");
     }
-    try writer.print(",\"actual\":{d}}}", .{actual});
+    try buf.print(allocator, ",\"actual\":{d}}}", .{actual});
 
     return allocator.dupe(u8, buf.items);
 }
@@ -268,40 +265,39 @@ fn enumDetails(allocator: std.mem.Allocator, allowed: []const []const u8, actual
     var buf: std.ArrayListUnmanaged(u8) = .empty;
     defer buf.deinit(allocator);
 
-    const writer = buf.writer(allocator);
-    try writer.writeAll("{\"allowed\":[");
+    try buf.appendSlice(allocator, "{\"allowed\":[");
     for (allowed, 0..) |value, index| {
         if (index > 0) {
-            try writer.writeByte(',');
+            try buf.append(allocator, ',');
         }
-        try writeJsonString(writer, value);
+        try writeJsonString(&buf, allocator, value);
     }
-    try writer.writeAll("],\"actual\":");
-    try writeJsonString(writer, actual);
-    try writer.writeByte('}');
+    try buf.appendSlice(allocator, "],\"actual\":");
+    try writeJsonString(&buf, allocator, actual);
+    try buf.append(allocator, '}');
 
     return allocator.dupe(u8, buf.items);
 }
 
-fn writeJsonString(writer: *std.Io.Writer, value: []const u8) !void {
-    try writer.writeByte('"');
+fn writeJsonString(buf: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, value: []const u8) !void {
+    try buf.append(allocator, '"');
     for (value) |ch| {
         switch (ch) {
-            '"' => try writer.writeAll("\\\""),
-            '\\' => try writer.writeAll("\\\\"),
-            '\n' => try writer.writeAll("\\n"),
-            '\r' => try writer.writeAll("\\r"),
-            '\t' => try writer.writeAll("\\t"),
+            '"' => try buf.appendSlice(allocator, "\\\""),
+            '\\' => try buf.appendSlice(allocator, "\\\\"),
+            '\n' => try buf.appendSlice(allocator, "\\n"),
+            '\r' => try buf.appendSlice(allocator, "\\r"),
+            '\t' => try buf.appendSlice(allocator, "\\t"),
             else => {
                 if (ch < 32) {
-                    try writer.print("\\u00{x:0>2}", .{ch});
+                    try buf.print(allocator, "\\u00{x:0>2}", .{ch});
                 } else {
-                    try writer.writeByte(ch);
+                    try buf.append(allocator, ch);
                 }
             },
         }
     }
-    try writer.writeByte('"');
+    try buf.append(allocator, '"');
 }
 
 test "basic rules catch empty strings and enum mismatch" {

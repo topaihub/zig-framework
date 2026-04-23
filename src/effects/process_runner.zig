@@ -88,29 +88,39 @@ pub const NativeProcessRunner = struct {
         return "native";
     }
 
+    fn getIo() std.Io {
+        // Ensure global_single_threaded has a real allocator for process spawning
+        // (spawn creates an internal arena backed by this allocator).
+        const t = std.Io.Threaded.global_single_threaded;
+        if (t.allocator.vtable == std.mem.Allocator.failing.vtable) {
+            t.allocator = std.heap.page_allocator;
+        }
+        return t.*.io();
+    }
+
     pub fn run(_: *NativeProcessRunner, allocator: std.mem.Allocator, request: ProcessRunRequest) !ProcessRunResult {
         if (request.argv.len == 0) return error.EmptyProcessArgv;
+        const io = getIo();
 
         var env_map = try buildEnvMap(allocator, request.env);
         defer if (env_map) |*map| map.deinit();
 
-        var child = std.process.Child.init(request.argv, allocator);
-        child.stdin_behavior = if (request.stdin != null) .Pipe else .Ignore;
-        child.stdout_behavior = .Pipe;
-        child.stderr_behavior = .Pipe;
-        child.cwd = request.cwd;
-        if (env_map) |*map| child.env_map = map;
-
-        try child.spawn();
+        var child = try std.process.spawn(io, .{
+            .argv = request.argv,
+            .stdin = if (request.stdin != null) .pipe else .ignore,
+            .stdout = .pipe,
+            .stderr = .pipe,
+            .cwd = if (request.cwd) |cwd| .{ .path = cwd } else .inherit,
+            .environ_map = if (env_map) |*map| map else null,
+        });
         errdefer {
-            _ = child.kill() catch {};
+            child.kill(io);
         }
-        try child.waitForSpawn();
 
         if (request.stdin) |stdin_bytes| {
             const stdin_file = child.stdin.?;
-            try stdin_file.writeAll(stdin_bytes);
-            stdin_file.close();
+            try stdin_file.writeStreamingAll(io, stdin_bytes);
+            stdin_file.close(io);
             child.stdin = null;
         }
 
@@ -127,7 +137,7 @@ pub const NativeProcessRunner = struct {
 
         const term = waitForExit(&child, request.timeout_ms) catch |err| {
             if (err == error.ProcessTimedOut) {
-                _ = child.kill() catch {};
+                child.kill(io);
                 stdout_thread.join();
                 stderr_thread.join();
                 stdout_capture.deinit();
@@ -165,7 +175,7 @@ pub const NativeProcessRunner = struct {
 };
 
 const PipeCapture = struct {
-    file: std.fs.File,
+    file: std.Io.File,
     max_output_bytes: usize,
     bytes: ?[]u8 = null,
     status: Status = .pending,
@@ -177,7 +187,7 @@ const PipeCapture = struct {
         read_failed,
     };
 
-    fn init(file: std.fs.File, max_output_bytes: usize) PipeCapture {
+    fn init(file: std.Io.File, max_output_bytes: usize) PipeCapture {
         return .{
             .file = file,
             .max_output_bytes = max_output_bytes,
@@ -185,8 +195,8 @@ const PipeCapture = struct {
     }
 
     fn run(self: *PipeCapture) void {
-        defer self.file.close();
-        self.bytes = readAllWithLimit(std.heap.page_allocator, self.file, self.max_output_bytes) catch |err| {
+        defer _ = std.os.linux.close(self.file.handle);
+        self.bytes = readAllWithLimit(std.heap.page_allocator, self.file.handle, self.max_output_bytes) catch |err| {
             self.status = switch (err) {
                 error.OutputTooLong => .too_long,
                 else => .read_failed,
@@ -219,10 +229,10 @@ const PipeCapture = struct {
     }
 };
 
-fn buildEnvMap(allocator: std.mem.Allocator, env_vars: []const ProcessEnvVar) !?std.process.EnvMap {
+fn buildEnvMap(allocator: std.mem.Allocator, env_vars: []const ProcessEnvVar) !?std.process.Environ.Map {
     if (env_vars.len == 0) return null;
 
-    var env_map = try std.process.getEnvMap(allocator);
+    var env_map = try std.Io.Threaded.global_single_threaded.environ.process_environ.createMap(allocator);
     errdefer env_map.deinit();
 
     for (env_vars) |entry| {
@@ -232,13 +242,14 @@ fn buildEnvMap(allocator: std.mem.Allocator, env_vars: []const ProcessEnvVar) !?
 }
 
 fn waitForExit(child: *std.process.Child, timeout_ms: ?u32) !std.process.Child.Term {
-    if (timeout_ms == null) return child.wait();
+    const io = std.Io.Threaded.global_single_threaded.*.io();
+    if (timeout_ms == null) return child.wait(io);
 
-    const deadline = (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); }) + @as(i64, timeout_ms.?);
+    const deadline = std.Io.Timestamp.now(io, .real).toMilliseconds() + @as(i64, timeout_ms.?);
     while (true) {
         if (try pollExited(child)) |term| return term;
-        if ((blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); }) >= deadline) return error.ProcessTimedOut;
-        std.Thread.sleep(5 * std.time.ns_per_ms);
+        if (std.Io.Timestamp.now(io, .real).toMilliseconds() >= deadline) return error.ProcessTimedOut;
+        std.Io.sleep(io, std.Io.Duration.fromMilliseconds(5), .real) catch {};
     }
 }
 
@@ -255,37 +266,42 @@ fn pollExitedWindows(child: *std.process.Child) !?std.process.Child.Term {
         error.WaitTimeOut => return null,
         else => return error.ProcessWaitFailed,
     };
-    return try child.wait();
+    return try child.wait(std.Io.Threaded.global_single_threaded.*.io());
 }
 
 fn pollExitedPosix(child: *std.process.Child) !?std.process.Child.Term {
-    const res = std.posix.waitpid(child.id, std.posix.W.NOHANG);
-    if (res.pid == 0) return null;
+    var status: u32 = 0;
+    const rc = std.os.linux.waitpid(child.id.?, &status, std.posix.W.NOHANG);
+    const pid: i32 = @bitCast(@as(u32, @truncate(rc)));
+    if (pid == 0) return null;
+    if (pid < 0) return error.ProcessWaitFailed;
 
-    const term = statusToTerm(res.status);
-    child.term = term;
-    child.id = undefined;
+    const term = statusToTerm(status);
+    child.id = null;
     return term;
 }
 
 fn statusToTerm(status: u32) std.process.Child.Term {
     return if (std.posix.W.IFEXITED(status))
-        .{ .Exited = std.posix.W.EXITSTATUS(status) }
+        .{ .exited = std.posix.W.EXITSTATUS(status) }
     else if (std.posix.W.IFSIGNALED(status))
-        .{ .Signal = std.posix.W.TERMSIG(status) }
+        .{ .signal = std.posix.W.TERMSIG(status) }
     else if (std.posix.W.IFSTOPPED(status))
-        .{ .Stopped = std.posix.W.STOPSIG(status) }
+        .{ .stopped = std.posix.W.STOPSIG(status) }
     else
-        .{ .Unknown = status };
+        .{ .unknown = status };
 }
 
-fn readAllWithLimit(allocator: std.mem.Allocator, file: std.fs.File, max_output_bytes: usize) ![]u8 {
+fn readAllWithLimit(allocator: std.mem.Allocator, fd: std.posix.fd_t, max_output_bytes: usize) ![]u8 {
     var list: std.ArrayListUnmanaged(u8) = .empty;
     errdefer list.deinit(allocator);
 
     var buf: [4096]u8 = undefined;
     while (true) {
-        const read = file.read(buf[0..]) catch return error.StreamReadFailed;
+        const rc = std.os.linux.read(fd, &buf, buf.len);
+        const signed: isize = @bitCast(rc);
+        if (signed < 0) return error.StreamReadFailed;
+        const read: usize = @intCast(signed);
         if (read == 0) break;
         if (list.items.len + read > max_output_bytes) return error.OutputTooLong;
         try list.appendSlice(allocator, buf[0..read]);
@@ -296,19 +312,19 @@ fn readAllWithLimit(allocator: std.mem.Allocator, file: std.fs.File, max_output_
 
 fn termKindFromTerm(term: std.process.Child.Term) ProcessTerminationKind {
     return switch (term) {
-        .Exited => .exited,
-        .Signal => .signal,
-        .Stopped => .stopped,
-        .Unknown => .unknown,
+        .exited => .exited,
+        .signal => .signal,
+        .stopped => .stopped,
+        .unknown => .unknown,
     };
 }
 
 fn exitCodeFromTerm(term: std.process.Child.Term) i32 {
     return switch (term) {
-        .Exited => |code| @intCast(code),
-        .Signal => |signal| -@as(i32, @intCast(signal)),
-        .Stopped => |signal| -@as(i32, @intCast(signal)),
-        .Unknown => |status| -@as(i32, @intCast(status)),
+        .exited => |code| @intCast(code),
+        .signal => |sig| -@as(i32, @intCast(@intFromEnum(sig))),
+        .stopped => |sig| -@as(i32, @intCast(@intFromEnum(sig))),
+        .unknown => |status| -@as(i32, @intCast(status)),
     };
 }
 
@@ -320,12 +336,12 @@ fn shellArgv(command: []const u8) []const []const u8 {
 }
 
 fn trimLineEndings(text: []const u8) []const u8 {
-    return std.mem.trimRight(u8, text, "\r\n");
+    return std.mem.trimEnd(u8, text, "\r\n");
 }
 
 test "native process runner executes command successfully" {
-    var runner = NativeProcessRunner.init();
-    var result = try runner.run(std.testing.allocator, .{
+    var runner_inst = NativeProcessRunner.init();
+    var result = try runner_inst.run(std.testing.allocator, .{
         .argv = shellArgv("echo hello"),
     });
     defer result.deinit(std.testing.allocator);
@@ -337,8 +353,8 @@ test "native process runner executes command successfully" {
 }
 
 test "native process runner reports missing command" {
-    var runner = NativeProcessRunner.init();
-    try std.testing.expectError(error.FileNotFound, runner.run(std.testing.allocator, .{
+    var runner_inst = NativeProcessRunner.init();
+    try std.testing.expectError(error.FileNotFound, runner_inst.run(std.testing.allocator, .{
         .argv = &.{"definitely_missing_framework_process_runner_binary"},
     }));
 }
@@ -349,8 +365,8 @@ test "native process runner returns non-zero exit code" {
         else => "exit 7",
     };
 
-    var runner = NativeProcessRunner.init();
-    var result = try runner.run(std.testing.allocator, .{
+    var runner_inst = NativeProcessRunner.init();
+    var result = try runner_inst.run(std.testing.allocator, .{
         .argv = shellArgv(command),
     });
     defer result.deinit(std.testing.allocator);
@@ -365,8 +381,8 @@ test "native process runner enforces timeout" {
         else => "sleep 1",
     };
 
-    var runner = NativeProcessRunner.init();
-    try std.testing.expectError(error.ProcessTimedOut, runner.run(std.testing.allocator, .{
+    var runner_inst = NativeProcessRunner.init();
+    try std.testing.expectError(error.ProcessTimedOut, runner_inst.run(std.testing.allocator, .{
         .argv = shellArgv(command),
         .timeout_ms = 100,
     }));
@@ -376,7 +392,8 @@ test "native process runner honors cwd" {
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
 
-    const cwd_path = try tmp_dir.dir.realpathAlloc(std.testing.allocator, ".");
+    const io = std.Io.Threaded.global_single_threaded.*.io();
+    const cwd_path = try tmp_dir.dir.realPathFileAlloc(io, ".", std.testing.allocator);
     defer std.testing.allocator.free(cwd_path);
 
     const command = switch (builtin.os.tag) {
@@ -384,8 +401,8 @@ test "native process runner honors cwd" {
         else => "pwd",
     };
 
-    var runner = NativeProcessRunner.init();
-    var result = try runner.run(std.testing.allocator, .{
+    var runner_inst = NativeProcessRunner.init();
+    var result = try runner_inst.run(std.testing.allocator, .{
         .argv = shellArgv(command),
         .cwd = cwd_path,
     });
@@ -400,8 +417,8 @@ test "native process runner injects env vars" {
         else => "printf '%s' \"$FRAMEWORK_EFFECT_TEST_ENV\"",
     };
 
-    var runner = NativeProcessRunner.init();
-    var result = try runner.run(std.testing.allocator, .{
+    var runner_inst = NativeProcessRunner.init();
+    var result = try runner_inst.run(std.testing.allocator, .{
         .argv = shellArgv(command),
         .env = &.{.{ .key = "FRAMEWORK_EFFECT_TEST_ENV", .value = "effects-ok" }},
     });
@@ -409,5 +426,3 @@ test "native process runner injects env vars" {
 
     try std.testing.expectEqualStrings("effects-ok", trimLineEndings(result.stdout));
 }
-
-

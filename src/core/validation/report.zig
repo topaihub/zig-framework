@@ -87,73 +87,73 @@ pub const ValidationReport = struct {
         return &self.issues.items[0];
     }
 
-    pub fn writeJson(self: *const Self, writer: anytype) !void {
-        try writer.writeByte('{');
-        try writer.writeAll("\"ok\":");
-        try writer.writeAll(if (self.isOk()) "true" else "false");
-        try writer.writeAll(",\"issues\":[");
+    pub fn writeJson(self: *const Self, buf: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator) !void {
+        try buf.append(allocator, '{');
+        try buf.appendSlice(allocator, "\"ok\":");
+        try buf.appendSlice(allocator, if (self.isOk()) "true" else "false");
+        try buf.appendSlice(allocator, ",\"issues\":[");
 
         for (self.issues.items, 0..) |issue, index| {
             if (index > 0) {
-                try writer.writeByte(',');
+                try buf.append(allocator, ',');
             }
-            try writeIssueJson(writer, issue);
+            try writeIssueJson(buf, allocator, issue);
         }
 
-        try writer.writeByte(']');
-        try writer.writeByte('}');
+        try buf.append(allocator, ']');
+        try buf.append(allocator, '}');
     }
 };
 
-fn writeIssueJson(writer: anytype, issue: ValidationIssue) !void {
-    try writer.writeByte('{');
-    try writeJsonStringField(writer, "path", issue.path, true);
-    try writeJsonStringField(writer, "code", issue.code, false);
-    try writeJsonStringField(writer, "message", issue.message, false);
-    try writeJsonStringField(writer, "severity", issue.severity.asText(), false);
+fn writeIssueJson(buf: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, issue: ValidationIssue) !void {
+    try buf.append(allocator, '{');
+    try writeJsonStringField(buf, allocator, "path", issue.path, true);
+    try writeJsonStringField(buf, allocator, "code", issue.code, false);
+    try writeJsonStringField(buf, allocator, "message", issue.message, false);
+    try writeJsonStringField(buf, allocator, "severity", issue.severity.asText(), false);
 
     if (issue.hint) |hint| {
-        try writeJsonStringField(writer, "hint", hint, false);
+        try writeJsonStringField(buf, allocator, "hint", hint, false);
     }
 
     if (issue.details_json) |details_json| {
-        try writer.writeAll(",\"details\":");
-        try writer.writeAll(details_json);
+        try buf.appendSlice(allocator, ",\"details\":");
+        try buf.appendSlice(allocator, details_json);
     }
 
-    try writer.writeAll(",\"retryable\":");
-    try writer.writeAll(if (issue.retryable) "true" else "false");
-    try writer.writeByte('}');
+    try buf.appendSlice(allocator, ",\"retryable\":");
+    try buf.appendSlice(allocator, if (issue.retryable) "true" else "false");
+    try buf.append(allocator, '}');
 }
 
-fn writeJsonStringField(writer: anytype, key: []const u8, value: []const u8, first: bool) !void {
+fn writeJsonStringField(buf: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, key: []const u8, value: []const u8, first: bool) !void {
     if (!first) {
-        try writer.writeByte(',');
+        try buf.append(allocator, ',');
     }
-    try writeJsonString(writer, key);
-    try writer.writeByte(':');
-    try writeJsonString(writer, value);
+    try writeJsonString(buf, allocator, key);
+    try buf.append(allocator, ':');
+    try writeJsonString(buf, allocator, value);
 }
 
-fn writeJsonString(writer: *std.Io.Writer, value: []const u8) !void {
-    try writer.writeByte('"');
+fn writeJsonString(buf: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, value: []const u8) !void {
+    try buf.append(allocator, '"');
     for (value) |ch| {
         switch (ch) {
-            '"' => try writer.writeAll("\\\""),
-            '\\' => try writer.writeAll("\\\\"),
-            '\n' => try writer.writeAll("\\n"),
-            '\r' => try writer.writeAll("\\r"),
-            '\t' => try writer.writeAll("\\t"),
+            '"' => try buf.appendSlice(allocator, "\\\""),
+            '\\' => try buf.appendSlice(allocator, "\\\\"),
+            '\n' => try buf.appendSlice(allocator, "\\n"),
+            '\r' => try buf.appendSlice(allocator, "\\r"),
+            '\t' => try buf.appendSlice(allocator, "\\t"),
             else => {
                 if (ch < 32) {
-                    try writer.print("\\u00{x:0>2}", .{ch});
+                    try buf.print(allocator, "\\u00{x:0>2}", .{ch});
                 } else {
-                    try writer.writeByte(ch);
+                    try buf.append(allocator, ch);
                 }
             },
         }
     }
-    try writer.writeByte('"');
+    try buf.append(allocator, '"');
 }
 
 test "validation report counts issues by severity" {
@@ -195,7 +195,7 @@ test "validation report json includes issues array" {
     var buf: std.ArrayListUnmanaged(u8) = .empty;
     defer buf.deinit(std.testing.allocator);
 
-    try report.writeJson(buf.writer(std.testing.allocator));
+    try report.writeJson(&buf, std.testing.allocator);
 
     try std.testing.expect(report.requiresRiskConfirmation());
     try std.testing.expect(std.mem.indexOf(u8, buf.items, "\"issues\":[") != null);
@@ -214,7 +214,7 @@ test "validation report writes issue details as raw json" {
     var buf: std.ArrayListUnmanaged(u8) = .empty;
     defer buf.deinit(std.testing.allocator);
 
-    try report.writeJson(buf.writer(std.testing.allocator));
+    try report.writeJson(&buf, std.testing.allocator);
 
     try std.testing.expect(std.mem.indexOf(u8, buf.items, "\"details\":{\"expected\":\"string\",\"actual\":\"boolean\"}") != null);
 }

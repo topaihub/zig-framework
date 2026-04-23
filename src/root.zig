@@ -53,21 +53,18 @@ pub const LogField = core.logging.LogField;
 pub const LogFieldValue = core.logging.LogFieldValue;
 pub const LogRecord = core.logging.LogRecord;
 pub const LogSink = core.logging.LogSink;
-pub const MemorySink = core.logging.MemorySink;
+pub const MemorySink = core.logging.sinks.Memory;
 pub const ConsoleStyle = core.logging.ConsoleStyle;
-pub const ConsoleSink = core.logging.ConsoleSink;
-pub const JsonlFileSink = core.logging.JsonlFileSink;
-pub const JsonlFileSinkStatus = core.logging.JsonlFileSinkStatus;
-pub const TraceTextFileSink = core.logging.TraceTextFileSink;
-pub const TraceTextFileSinkStatus = core.logging.TraceTextFileSinkStatus;
+pub const ConsoleSink = core.logging.sinks.Console;
+pub const JsonlFileSink = core.logging.sinks.JsonlFile;
+pub const TraceTextFileSink = core.logging.sinks.TraceTextFile;
 pub const TraceTextFileSinkOptions = core.logging.TraceTextFileSinkOptions;
-pub const MultiSink = core.logging.MultiSink;
+pub const MultiSink = core.logging.sinks.Multi;
 pub const RedactMode = core.logging.RedactMode;
-pub const RotatingFileSink = core.logging.RotatingFileSink;
+pub const RotatingFileSink = core.logging.sinks.RotatingFile;
 pub const RotatingFileSinkConfig = core.logging.RotatingFileSinkConfig;
 pub const LogFormat = core.logging.LogFormat;
 pub const Logger = core.logging.Logger;
-pub const LoggerTruncationStats = core.logging.LoggerTruncationStats;
 pub const LoggerOptions = core.logging.LoggerOptions;
 pub const TraceContext = core.logging.TraceContext;
 pub const TraceContextProvider = core.logging.TraceContextProvider;
@@ -213,7 +210,6 @@ test "framework module scaffold exports are available" {
     try std.testing.expectEqualStrings("agentkit", agentkit.MODULE_NAME);
     try std.testing.expectEqualStrings("servicekit", servicekit.MODULE_NAME);
     try std.testing.expectEqualStrings("CORE_INTERNAL_ERROR", core.error_model.code.CORE_INTERNAL_ERROR);
-    try std.testing.expectEqualStrings("logging", core.logging.MODULE_NAME);
 }
 
 

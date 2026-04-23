@@ -265,38 +265,37 @@ fn unknownFieldDetails(allocator: std.mem.Allocator, definitions: []const FieldD
     var buf: std.ArrayListUnmanaged(u8) = .empty;
     defer buf.deinit(allocator);
 
-    const writer = buf.writer(allocator);
-    try writer.writeAll("{\"allowedFields\":[");
+    try buf.appendSlice(allocator, "{\"allowedFields\":[");
     for (definitions, 0..) |definition, index| {
         if (index > 0) {
-            try writer.writeByte(',');
+            try buf.append(allocator, ',');
         }
-        try writeJsonString(writer, definition.key);
+        try writeJsonString(&buf, allocator, definition.key);
     }
-    try writer.writeAll("]}");
+    try buf.appendSlice(allocator, "]}");
 
     return allocator.dupe(u8, buf.items);
 }
 
-fn writeJsonString(writer: *std.Io.Writer, value: []const u8) !void {
-    try writer.writeByte('"');
+fn writeJsonString(buf: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, value: []const u8) !void {
+    try buf.append(allocator, '"');
     for (value) |ch| {
         switch (ch) {
-            '"' => try writer.writeAll("\\\""),
-            '\\' => try writer.writeAll("\\\\"),
-            '\n' => try writer.writeAll("\\n"),
-            '\r' => try writer.writeAll("\\r"),
-            '\t' => try writer.writeAll("\\t"),
+            '"' => try buf.appendSlice(allocator, "\\\""),
+            '\\' => try buf.appendSlice(allocator, "\\\\"),
+            '\n' => try buf.appendSlice(allocator, "\\n"),
+            '\r' => try buf.appendSlice(allocator, "\\r"),
+            '\t' => try buf.appendSlice(allocator, "\\t"),
             else => {
                 if (ch < 32) {
-                    try writer.print("\\u00{x:0>2}", .{ch});
+                    try buf.print(allocator, "\\u00{x:0>2}", .{ch});
                 } else {
-                    try writer.writeByte(ch);
+                    try buf.append(allocator, ch);
                 }
             },
         }
     }
-    try writer.writeByte('"');
+    try buf.append(allocator, '"');
 }
 
 test "validator rejects unknown fields and missing required fields" {

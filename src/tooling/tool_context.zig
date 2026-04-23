@@ -22,7 +22,7 @@ pub const ToolContext = struct {
 };
 
 test "tool context can read validated params" {
-    var sink = core.logging.MemorySink.init(std.testing.allocator, 1);
+    var sink = core.logging.sinks.Memory.init(std.testing.allocator, 1);
     defer sink.deinit();
     var logger = core.logging.Logger.init(sink.asLogSink(), .silent);
     defer logger.deinit();

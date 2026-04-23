@@ -71,11 +71,13 @@ pub const NativeClock = struct {
     }
 
     pub fn monotonicNs(_: *NativeClock) u64 {
-        return @intCast(std.time.nanoTimestamp());
+        const io = std.Io.Threaded.global_single_threaded.*.io();
+        return @intCast(std.Io.Timestamp.now(io, .awake).nanoseconds);
     }
 
     pub fn sleepMs(_: *NativeClock, ms: u64) void {
-        std.Thread.sleep(ms * std.time.ns_per_ms);
+        const io = std.Io.Threaded.global_single_threaded.*.io();
+        std.Io.sleep(io, std.Io.Duration.fromMilliseconds(@intCast(ms)), .real) catch {};
     }
 
     fn nowUnixMsErased(ptr: *anyopaque) i64 {

@@ -1,6 +1,6 @@
 const std = @import("std");
 const observer_model = @import("observer.zig");
-const logging = @import("../core/logging/root.zig");
+const logging = @import("zig-logging");
 
 pub const Observer = observer_model.Observer;
 pub const Logger = logging.Logger;
@@ -73,9 +73,9 @@ pub const LogObserver = struct {
 };
 
 test "log observer bridges observer events into logger" {
-    const memory_sink_model = @import("../core/logging/memory_sink.zig");
+    const memory_sink_model = @import("zig-logging");
 
-    var sink = memory_sink_model.MemorySink.init(std.testing.allocator, 4);
+    var sink = memory_sink_model.sinks.Memory.init(std.testing.allocator, 4);
     defer sink.deinit();
     var logger = Logger.init(sink.asLogSink(), .info);
     defer logger.deinit();

@@ -8,11 +8,11 @@ const event_bus_model = @import("event_bus.zig");
 const task_runner_model = @import("task_runner.zig");
 
 pub const LogLevel = core.logging.LogLevel;
-pub const MemorySink = core.logging.MemorySink;
-pub const ConsoleSink = core.logging.ConsoleSink;
+pub const MemorySink = core.logging.sinks.Memory;
+pub const ConsoleSink = core.logging.sinks.Console;
 pub const ConsoleStyle = core.logging.ConsoleStyle;
-pub const JsonlFileSink = core.logging.JsonlFileSink;
-pub const MultiSink = core.logging.MultiSink;
+pub const JsonlFileSink = core.logging.sinks.JsonlFile;
+pub const MultiSink = core.logging.sinks.Multi;
 pub const Logger = core.logging.Logger;
 pub const Observer = observability.Observer;
 pub const MemoryObserver = observability.MemoryObserver;

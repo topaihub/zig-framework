@@ -95,40 +95,38 @@ pub const ScriptHost = struct {
 fn paramsToJson(allocator: std.mem.Allocator, fields: []const core.validation.ValidationField) ![]u8 {
     var buf: std.ArrayListUnmanaged(u8) = .empty;
     defer buf.deinit(allocator);
-    const writer = buf.writer(allocator);
-    try writer.writeByte('{');
+    try buf.append(allocator, '{');
     for (fields, 0..) |field, index| {
-        if (index > 0) try writer.writeByte(',');
-        try writer.print("{f}:", .{std.json.fmt(field.key, .{})});
+        if (index > 0) try buf.append(allocator, ',');
+        try buf.print(allocator, "{f}:", .{std.json.fmt(field.key, .{})});
         switch (field.value) {
-            .string => |value| try writer.print("{f}", .{std.json.fmt(value, .{})}),
-            .integer => |value| try writer.print("{d}", .{value}),
-            .boolean => |value| try writer.writeAll(if (value) "true" else "false"),
-            .float => |value| try writer.print("{d}", .{value}),
-            .null => try writer.writeAll("null"),
+            .string => |value| try buf.print(allocator, "{f}", .{std.json.fmt(value, .{})}),
+            .integer => |value| try buf.print(allocator, "{d}", .{value}),
+            .boolean => |value| try buf.appendSlice(allocator, if (value) "true" else "false"),
+            .float => |value| try buf.print(allocator, "{d}", .{value}),
+            .null => try buf.appendSlice(allocator, "null"),
             else => return error.UnsupportedValidationValue,
         }
     }
-    try writer.writeByte('}');
+    try buf.append(allocator, '}');
     return try allocator.dupe(u8, buf.items);
 }
 
 fn requestToJson(allocator: std.mem.Allocator, request: script_contract.ScriptRequest) ![]u8 {
     var buf: std.ArrayListUnmanaged(u8) = .empty;
     defer buf.deinit(allocator);
-    const writer = buf.writer(allocator);
-    try writer.writeByte('{');
-    try writer.print("\"tool_id\":{f},\"request_id\":{f},\"trace_id\":", .{
+    try buf.append(allocator, '{');
+    try buf.print(allocator, "\"tool_id\":{f},\"request_id\":{f},\"trace_id\":", .{
         std.json.fmt(request.tool_id, .{}),
         std.json.fmt(request.request_id, .{}),
     });
     if (request.trace_id) |trace_id| {
-        try writer.print("{f}", .{std.json.fmt(trace_id, .{})});
+        try buf.print(allocator, "{f}", .{std.json.fmt(trace_id, .{})});
     } else {
-        try writer.writeAll("null");
+        try buf.appendSlice(allocator, "null");
     }
-    try writer.print(",\"params_json\":{f}", .{std.json.fmt(request.params_json, .{})});
-    try writer.writeByte('}');
+    try buf.print(allocator, ",\"params_json\":{f}", .{std.json.fmt(request.params_json, .{})});
+    try buf.append(allocator, '}');
     return try allocator.dupe(u8, buf.items);
 }
 
@@ -184,7 +182,7 @@ test "script host executes json-stdio script successfully" {
     defer event_bus.deinit();
     var host = ScriptHost.init(std.testing.allocator, runner_impl.runner(), null, event_bus.asEventBus());
 
-    var sink = core.logging.MemorySink.init(std.testing.allocator, 1);
+    var sink = core.logging.sinks.Memory.init(std.testing.allocator, 1);
     defer sink.deinit();
     var logger = core.logging.Logger.init(sink.asLogSink(), .silent);
     defer logger.deinit();
@@ -213,7 +211,7 @@ test "script host executes json-stdio script successfully" {
         ++ "print(json.dumps({'ok': True, 'output_json': req['params_json']}))";
 
     var result = try host.run(&ctx, .{
-        .program = "python",
+        .program = "python3",
         .args = &.{ "-c", py_code },
         .timeout_ms = 1000,
     });
@@ -227,7 +225,7 @@ test "script host rejects invalid json stdout" {
     var runner_impl = effects.NativeProcessRunner.init();
     var host = ScriptHost.init(std.testing.allocator, runner_impl.runner(), null, null);
 
-    var sink = core.logging.MemorySink.init(std.testing.allocator, 1);
+    var sink = core.logging.sinks.Memory.init(std.testing.allocator, 1);
     defer sink.deinit();
     var logger = core.logging.Logger.init(sink.asLogSink(), .silent);
     defer logger.deinit();
@@ -250,7 +248,7 @@ test "script host rejects invalid json stdout" {
     };
 
     try std.testing.expectError(error.InvalidScriptJsonOutput, host.run(&ctx, .{
-        .program = "python",
+        .program = "python3",
         .args = &.{ "-c", "print('not-json')" },
         .timeout_ms = 1000,
     }));
@@ -260,7 +258,7 @@ test "script host enforces timeout" {
     var runner_impl = effects.NativeProcessRunner.init();
     var host = ScriptHost.init(std.testing.allocator, runner_impl.runner(), null, null);
 
-    var sink = core.logging.MemorySink.init(std.testing.allocator, 1);
+    var sink = core.logging.sinks.Memory.init(std.testing.allocator, 1);
     defer sink.deinit();
     var logger = core.logging.Logger.init(sink.asLogSink(), .silent);
     defer logger.deinit();
@@ -284,7 +282,7 @@ test "script host enforces timeout" {
 
     const py_code = "import time; time.sleep(1); print('{\"ok\": true}')";
     try std.testing.expectError(error.ProcessTimedOut, host.run(&ctx, .{
-        .program = "python",
+        .program = "python3",
         .args = &.{ "-c", py_code },
         .timeout_ms = 50,
     }));
@@ -294,7 +292,7 @@ test "script host rejects non-zero exit status" {
     var runner_impl = effects.NativeProcessRunner.init();
     var host = ScriptHost.init(std.testing.allocator, runner_impl.runner(), null, null);
 
-    var sink = core.logging.MemorySink.init(std.testing.allocator, 1);
+    var sink = core.logging.sinks.Memory.init(std.testing.allocator, 1);
     defer sink.deinit();
     var logger = core.logging.Logger.init(sink.asLogSink(), .silent);
     defer logger.deinit();
@@ -317,7 +315,7 @@ test "script host rejects non-zero exit status" {
     };
 
     try std.testing.expectError(error.ScriptProcessFailed, host.run(&ctx, .{
-        .program = "python",
+        .program = "python3",
         .args = &.{ "-c", "import sys; print('{\"ok\": false}'); sys.exit(3)" },
         .timeout_ms = 1000,
     }));
@@ -348,7 +346,7 @@ test "script host logs stderr and emits failure events" {
     };
 
     try std.testing.expectError(error.InvalidScriptJsonOutput, host.run(&ctx, .{
-        .program = "python",
+        .program = "python3",
         .args = &.{ "-c", "import sys; sys.stderr.write('oops\\n'); print('not-json')" },
         .timeout_ms = 1000,
     }));

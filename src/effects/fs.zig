@@ -107,7 +107,8 @@ pub const NativeFileSystem = struct {
     }
 
     pub fn readFileAlloc(_: *NativeFileSystem, allocator: std.mem.Allocator, path: []const u8, max_bytes: usize) ![]u8 {
-        return std.fs.cwd().readFileAlloc(allocator, path, max_bytes);
+        const io = std.Io.Threaded.global_single_threaded.*.io();
+        return std.Io.Dir.cwd().readFileAlloc(io, path, allocator, std.Io.Limit.limited(max_bytes));
     }
 
     pub fn writeFile(_: *NativeFileSystem, path: []const u8, bytes: []const u8) !void {
@@ -115,25 +116,29 @@ pub const NativeFileSystem = struct {
             const io = std.Io.Threaded.global_single_threaded.*.io();
             try std.Io.Dir.cwd().createDirPath(io, dir_name);
         }
-        var file = try std.fs.cwd().createFile(path, .{ .truncate = true });
-        defer file.close();
-        try file.writeAll(bytes);
+        const io_w = std.Io.Threaded.global_single_threaded.*.io();
+        var file = try std.Io.Dir.cwd().createFile(io_w, path, .{});
+        defer file.close(io_w);
+        try file.writeStreamingAll(io_w, bytes);
     }
 
     pub fn atomicWriteFile(_: *NativeFileSystem, path: []const u8, bytes: []const u8) !void {
-        var write_buffer: [4096]u8 = undefined;
-        var atomic = try std.fs.cwd().atomicFile(path, .{
+
+        const io_a = std.Io.Threaded.global_single_threaded.*.io();
+        var atomic = try std.Io.Dir.cwd().createFileAtomic(io_a, path, .{
             .make_path = true,
-            .write_buffer = write_buffer[0..],
+            .replace = true,
+
         });
-        defer atomic.deinit();
-        try atomic.file_writer.interface.writeAll(bytes);
-        try atomic.finish();
+        defer atomic.deinit(io_a);
+        try atomic.file.writeStreamingAll(io_a, bytes);
+        try atomic.replace(io_a);
     }
 
     pub fn listDir(_: *NativeFileSystem, allocator: std.mem.Allocator, path: []const u8) ![]FsEntry {
-        var dir = try std.fs.cwd().openDir(path, .{ .iterate = true });
-        defer dir.close();
+        const io_l = std.Io.Threaded.global_single_threaded.*.io();
+        var dir = try std.Io.Dir.cwd().openDir(io_l, path, .{ .iterate = true });
+        defer dir.close(io_l);
 
         var items: std.ArrayListUnmanaged(FsEntry) = .empty;
         errdefer {
@@ -142,7 +147,7 @@ pub const NativeFileSystem = struct {
         }
 
         var it = dir.iterate();
-        while (try it.next()) |entry| {
+        while (try it.next(io_l)) |entry| {
             try items.append(allocator, .{
                 .name = try allocator.dupe(u8, entry.name),
                 .kind = kindFromEntry(entry.kind),
@@ -153,7 +158,8 @@ pub const NativeFileSystem = struct {
     }
 
     pub fn deleteFile(_: *NativeFileSystem, path: []const u8) !void {
-        try std.fs.cwd().deleteFile(path);
+        const io_d = std.Io.Threaded.global_single_threaded.*.io();
+        try std.Io.Dir.cwd().deleteFile(io_d, path);
     }
 
     pub fn moveFile(_: *NativeFileSystem, old_path: []const u8, new_path: []const u8) !void {
@@ -161,11 +167,13 @@ pub const NativeFileSystem = struct {
             const io = std.Io.Threaded.global_single_threaded.*.io();
             try std.Io.Dir.cwd().createDirPath(io, dir_name);
         }
-        try std.fs.cwd().rename(old_path, new_path);
+        const io_m = std.Io.Threaded.global_single_threaded.*.io();
+        try std.Io.Dir.cwd().rename(old_path, std.Io.Dir.cwd(), new_path, io_m);
     }
 
     pub fn makePath(_: *NativeFileSystem, path: []const u8) !void {
-        try std.fs.cwd().makePath(path);
+        const io_mk = std.Io.Threaded.global_single_threaded.*.io();
+        try std.Io.Dir.cwd().createDirPath(io_mk, path);
     }
 
     fn readFileAllocErased(ptr: *anyopaque, allocator: std.mem.Allocator, path: []const u8, max_bytes: usize) anyerror![]u8 {
@@ -208,7 +216,7 @@ pub const NativeFileSystem = struct {
     }
 };
 
-fn kindFromEntry(kind: std.fs.Dir.Entry.Kind) FsEntryKind {
+fn kindFromEntry(kind: std.Io.File.Kind) FsEntryKind {
     return switch (kind) {
         .file => .file,
         .directory => .directory,
@@ -233,7 +241,7 @@ test "native file system writes and reads a file" {
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
 
-    const root_path = try tmp_dir.dir.realpathAlloc(std.testing.allocator, ".");
+    const root_path = try tmp_dir.dir.realPathFileAlloc(std.Io.Threaded.global_single_threaded.*.io(), ".", std.testing.allocator);
     defer std.testing.allocator.free(root_path);
     const file_path = try std.fs.path.join(std.testing.allocator, &.{ root_path, "sample.txt" });
     defer std.testing.allocator.free(file_path);
@@ -250,7 +258,7 @@ test "native file system atomic write replaces old content" {
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
 
-    const root_path = try tmp_dir.dir.realpathAlloc(std.testing.allocator, ".");
+    const root_path = try tmp_dir.dir.realPathFileAlloc(std.Io.Threaded.global_single_threaded.*.io(), ".", std.testing.allocator);
     defer std.testing.allocator.free(root_path);
     const file_path = try std.fs.path.join(std.testing.allocator, &.{ root_path, "atomic.txt" });
     defer std.testing.allocator.free(file_path);
@@ -268,7 +276,7 @@ test "native file system lists directory entries" {
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
 
-    const root_path = try tmp_dir.dir.realpathAlloc(std.testing.allocator, ".");
+    const root_path = try tmp_dir.dir.realPathFileAlloc(std.Io.Threaded.global_single_threaded.*.io(), ".", std.testing.allocator);
     defer std.testing.allocator.free(root_path);
     const nested_dir = try std.fs.path.join(std.testing.allocator, &.{ root_path, "nested" });
     defer std.testing.allocator.free(nested_dir);
@@ -293,7 +301,7 @@ test "native file system deletes a file" {
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
 
-    const root_path = try tmp_dir.dir.realpathAlloc(std.testing.allocator, ".");
+    const root_path = try tmp_dir.dir.realPathFileAlloc(std.Io.Threaded.global_single_threaded.*.io(), ".", std.testing.allocator);
     defer std.testing.allocator.free(root_path);
     const file_path = try std.fs.path.join(std.testing.allocator, &.{ root_path, "delete-me.txt" });
     defer std.testing.allocator.free(file_path);
@@ -308,7 +316,7 @@ test "native file system moves a file" {
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
 
-    const root_path = try tmp_dir.dir.realpathAlloc(std.testing.allocator, ".");
+    const root_path = try tmp_dir.dir.realPathFileAlloc(std.Io.Threaded.global_single_threaded.*.io(), ".", std.testing.allocator);
     defer std.testing.allocator.free(root_path);
     const old_path = try std.fs.path.join(std.testing.allocator, &.{ root_path, "old.txt" });
     defer std.testing.allocator.free(old_path);

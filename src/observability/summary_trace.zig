@@ -83,7 +83,7 @@ pub const SummaryTrace = struct {
 };
 
 test "summary trace emits ME/RT/BT/ET data" {
-    var memory_sink = core.logging.MemorySink.init(std.testing.allocator, 8);
+    var memory_sink = core.logging.sinks.Memory.init(std.testing.allocator, 8);
     defer memory_sink.deinit();
     var logger = core.logging.Logger.init(memory_sink.asLogSink(), .trace);
     defer logger.deinit();

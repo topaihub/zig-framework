@@ -29,16 +29,16 @@ pub const RepoHealthCheckTool = struct {
 
         var out: std.ArrayListUnmanaged(u8) = .empty;
         defer out.deinit(ctx.allocator);
-        const writer = out.writer(ctx.allocator);
-        try writer.writeByte('{');
-        try writer.print("\"path\":{f}", .{std.json.fmt(path, .{})});
-        try writer.print(",\"entry_count\":{d}", .{entries.len});
-        try writer.writeAll(if (has_git) ",\"is_git_repo\":true" else ",\"is_git_repo\":false");
-        try writer.writeAll(if (has_readme) ",\"has_readme\":true" else ",\"has_readme\":false");
-        try writer.writeAll(if (has_build_zig) ",\"has_build_zig\":true" else ",\"has_build_zig\":false");
-        try writer.writeAll(if (has_src_dir) ",\"has_src_dir\":true" else ",\"has_src_dir\":false");
-        try writer.print(",\"status\":{f}", .{std.json.fmt(status, .{})});
-        try writer.writeByte('}');
+
+        try out.append(ctx.allocator, '{');
+        try out.print(ctx.allocator, "\"path\":{f}", .{std.json.fmt(path, .{})});
+        try out.print(ctx.allocator, ",\"entry_count\":{d}", .{entries.len});
+        try out.appendSlice(ctx.allocator, if (has_git) ",\"is_git_repo\":true" else ",\"is_git_repo\":false");
+        try out.appendSlice(ctx.allocator, if (has_readme) ",\"has_readme\":true" else ",\"has_readme\":false");
+        try out.appendSlice(ctx.allocator, if (has_build_zig) ",\"has_build_zig\":true" else ",\"has_build_zig\":false");
+        try out.appendSlice(ctx.allocator, if (has_src_dir) ",\"has_src_dir\":true" else ",\"has_src_dir\":false");
+        try out.print(ctx.allocator, ",\"status\":{f}", .{std.json.fmt(status, .{})});
+        try out.append(ctx.allocator, '}');
         return try ctx.allocator.dupe(u8, out.items);
     }
 };
@@ -71,7 +71,7 @@ test "repo health check supports direct tool execution" {
 
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
-    const root_path = try tmp_dir.dir.realpathAlloc(std.testing.allocator, ".");
+    const root_path = try tmp_dir.dir.realPathFileAlloc(std.Io.Threaded.global_single_threaded.*.io(), ".", std.testing.allocator);
     defer std.testing.allocator.free(root_path);
 
     const git_path = try std.fs.path.join(std.testing.allocator, &.{ root_path, ".git" });
@@ -142,7 +142,7 @@ test "repo health check supports command surface execution" {
 
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
-    const root_path = try tmp_dir.dir.realpathAlloc(std.testing.allocator, ".");
+    const root_path = try tmp_dir.dir.realPathFileAlloc(std.Io.Threaded.global_single_threaded.*.io(), ".", std.testing.allocator);
     defer std.testing.allocator.free(root_path);
 
     const src_path = try std.fs.path.join(std.testing.allocator, &.{ root_path, "src" });

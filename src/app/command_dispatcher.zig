@@ -45,19 +45,18 @@ pub const CommandEnvelope = contracts.envelope.Envelope(CommandDispatchResult);
 fn summarizeParamsJson(allocator: std.mem.Allocator, fields: []const ValidationField) anyerror![]const u8 {
     var buf: std.ArrayListUnmanaged(u8) = .empty;
     defer buf.deinit(allocator);
-    const writer = buf.writer(allocator);
-    try writer.writeByte('{');
+    try buf.append(allocator, '{');
     for (fields, 0..) |field, index| {
-        if (index > 0) try writer.writeByte(',');
-        try writer.print("\"{s}\":", .{field.key});
+        if (index > 0) try buf.append(allocator, ',');
+        try buf.print(allocator, "\"{s}\":", .{field.key});
         switch (field.value) {
-            .string => |value| try writer.print("\"{s}\"", .{value}),
-            .integer => |value| try writer.print("{d}", .{value}),
-            .boolean => |value| try writer.writeAll(if (value) "true" else "false"),
-            else => try writer.writeAll("null"),
+            .string => |value| try buf.print(allocator, "\"{s}\"", .{value}),
+            .integer => |value| try buf.print(allocator, "{d}", .{value}),
+            .boolean => |value| try buf.appendSlice(allocator, if (value) "true" else "false"),
+            else => try buf.appendSlice(allocator, "null"),
         }
     }
-    try writer.writeByte('}');
+    try buf.append(allocator, '}');
     return allocator.dupe(u8, buf.items);
 }
 
@@ -78,7 +77,7 @@ const AsyncCommandJobData = struct {
     fn run(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror![]u8 {
         const self: *@This() = @ptrCast(@alignCast(ptr));
 
-        var sink = core.logging.MemorySink.init(allocator, 1);
+        var sink = core.logging.sinks.Memory.init(allocator, 1);
         defer sink.deinit();
         var logger = core.logging.Logger.init(sink.asLogSink(), .silent);
         defer logger.deinit();
@@ -282,7 +281,7 @@ pub const CommandDispatcher = struct {
             return CommandEnvelope.failure(app_error, self.metaForRequest(request));
         };
 
-        var fallback_sink = core.logging.MemorySink.init(self.allocator, 1);
+        var fallback_sink = core.logging.sinks.Memory.init(self.allocator, 1);
         defer fallback_sink.deinit();
         var fallback_logger = core.logging.Logger.init(fallback_sink.asLogSink(), .silent);
         defer fallback_logger.deinit();
@@ -513,29 +512,28 @@ pub const CommandDispatcher = struct {
         var buf: std.ArrayListUnmanaged(u8) = .empty;
         defer buf.deinit(self.allocator);
 
-        const writer = buf.writer(self.allocator);
-        try writer.writeByte('{');
-        try appendJsonStringField(writer, "method", request.method, true);
-        try appendJsonStringField(writer, "requestId", request.request_id, false);
-        try appendJsonStringField(writer, "source", @tagName(request.source), false);
-        try appendJsonStringField(writer, "authority", request.authority.asText(), false);
+        try buf.append(self.allocator, '{');
+        try appendJsonStringField(&buf, self.allocator, "method", request.method, true);
+        try appendJsonStringField(&buf, self.allocator, "requestId", request.request_id, false);
+        try appendJsonStringField(&buf, self.allocator, "source", @tagName(request.source), false);
+        try appendJsonStringField(&buf, self.allocator, "authority", request.authority.asText(), false);
         if (command) |cmd| {
-            try appendJsonStringField(writer, "commandId", cmd.id, false);
-            try appendJsonStringField(writer, "executionMode", @tagName(cmd.execution_mode), false);
+            try appendJsonStringField(&buf, self.allocator, "commandId", cmd.id, false);
+            try appendJsonStringField(&buf, self.allocator, "executionMode", @tagName(cmd.execution_mode), false);
         }
         if (error_code) |value| {
-            try appendJsonStringField(writer, "errorCode", value, false);
+            try appendJsonStringField(&buf, self.allocator, "errorCode", value, false);
         }
         if (task_id) |value| {
-            try appendJsonStringField(writer, "taskId", value, false);
+            try appendJsonStringField(&buf, self.allocator, "taskId", value, false);
         }
         if (duration_ms) |value| {
-            try writer.print(",\"durationMs\":{d}", .{value});
+            try buf.print(self.allocator, ",\"durationMs\":{d}", .{value});
         }
         if (self.metaForRequest(request).trace_id) |trace_id| {
-            try appendJsonStringField(writer, "traceId", trace_id, false);
+            try appendJsonStringField(&buf, self.allocator, "traceId", trace_id, false);
         }
-        try writer.writeByte('}');
+        try buf.append(self.allocator, '}');
         return self.allocator.dupe(u8, buf.items);
     }
 };
@@ -581,34 +579,34 @@ fn freeRequestContext(allocator: std.mem.Allocator, request_context: RequestCont
     if (request_context.span_id) |span_id| allocator.free(span_id);
 }
 
-fn appendJsonStringField(writer: anytype, key: []const u8, value: []const u8, first: bool) anyerror!void {
+fn appendJsonStringField(buf: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, key: []const u8, value: []const u8, first: bool) anyerror!void {
     if (!first) {
-        try writer.writeByte(',');
+        try buf.append(allocator, ',');
     }
-    try writeJsonString(writer, key);
-    try writer.writeByte(':');
-    try writeJsonString(writer, value);
+    try writeJsonString(buf, allocator, key);
+    try buf.append(allocator, ':');
+    try writeJsonString(buf, allocator, value);
 }
 
-fn writeJsonString(writer: *std.Io.Writer, value: []const u8) anyerror!void {
-    try writer.writeByte('"');
+fn writeJsonString(buf: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, value: []const u8) anyerror!void {
+    try buf.append(allocator, '"');
     for (value) |ch| {
         switch (ch) {
-            '"' => try writer.writeAll("\\\""),
-            '\\' => try writer.writeAll("\\\\"),
-            '\n' => try writer.writeAll("\\n"),
-            '\r' => try writer.writeAll("\\r"),
-            '\t' => try writer.writeAll("\\t"),
+            '"' => try buf.appendSlice(allocator, "\\\""),
+            '\\' => try buf.appendSlice(allocator, "\\\\"),
+            '\n' => try buf.appendSlice(allocator, "\\n"),
+            '\r' => try buf.appendSlice(allocator, "\\r"),
+            '\t' => try buf.appendSlice(allocator, "\\t"),
             else => {
                 if (ch < 32) {
-                    try writer.print("\\u00{x:0>2}", .{ch});
+                    try buf.print(allocator, "\\u00{x:0>2}", .{ch});
                 } else {
-                    try writer.writeByte(ch);
+                    try buf.append(allocator, ch);
                 }
             },
         }
     }
-    try writer.writeByte('"');
+    try buf.append(allocator, '"');
 }
 
 test "command dispatcher validates request params through shared validator" {
@@ -638,9 +636,9 @@ test "command dispatcher validates request params through shared validator" {
 }
 
 test "command dispatcher writes validation lifecycle logs" {
-    const memory_sink_model = @import("../core/logging/memory_sink.zig");
+    const memory_sink_model = @import("zig-logging");
 
-    var memory_sink = memory_sink_model.MemorySink.init(std.testing.allocator, 8);
+    var memory_sink = memory_sink_model.sinks.Memory.init(std.testing.allocator, 8);
     defer memory_sink.deinit();
 
     var logger = Logger.init(memory_sink.asLogSink(), .info);

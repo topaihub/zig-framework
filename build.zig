@@ -4,11 +4,15 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const logging_dep = b.dependency("zig-logging", .{ .target = target, .optimize = optimize });
+    const logging_mod = logging_dep.module("zig-logging");
+
     const lib_mod = b.addModule("framework", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
     });
+    lib_mod.addImport("zig-logging", logging_mod);
 
     const exe = b.addExecutable(.{
         .name = "framework",
@@ -39,10 +43,9 @@ pub fn build(b: *std.Build) void {
         }),
     });
     root_tests.root_module.addImport("framework", lib_mod);
+    root_tests.root_module.addImport("zig-logging", logging_mod);
     const run_root_tests = b.addRunArtifact(root_tests);
 
     const test_step = b.step("test", "Run framework unit tests");
     test_step.dependOn(&run_root_tests.step);
 }
-
-

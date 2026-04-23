@@ -4,55 +4,54 @@ const contracts = @import("../contracts/root.zig");
 pub fn renderCapabilityManifestJson(allocator: std.mem.Allocator, manifest: contracts.capability_manifest.CapabilityManifest) anyerror![]u8 {
     var buf: std.ArrayListUnmanaged(u8) = .empty;
     defer buf.deinit(allocator);
-    const writer = buf.writer(allocator);
-    try writeCapabilityManifestJson(writer, manifest);
+    try writeCapabilityManifestJson(&buf, allocator, manifest);
     return allocator.dupe(u8, buf.items);
 }
 
-pub fn writeCapabilityManifestJson(writer: anytype, manifest: contracts.capability_manifest.CapabilityManifest) anyerror!void {
-    try writer.writeByte('{');
+pub fn writeCapabilityManifestJson(buf: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, manifest: contracts.capability_manifest.CapabilityManifest) anyerror!void {
+    try buf.append(allocator, '{');
     var first = true;
     for (manifest.groups) |group| {
-        if (!first) try writer.writeByte(',');
+        if (!first) try buf.append(allocator, ',');
         first = false;
-        try writeJsonString(writer, group.key);
-        try writer.writeByte(':');
-        try writer.writeByte('[');
+        try writeJsonString(buf, allocator, group.key);
+        try buf.append(allocator, ':');
+        try buf.append(allocator, '[');
         for (group.items, 0..) |item, index| {
-            if (index > 0) try writer.writeByte(',');
-            try writeJsonString(writer, item);
+            if (index > 0) try buf.append(allocator, ',');
+            try writeJsonString(buf, allocator, item);
         }
-        try writer.writeByte(']');
+        try buf.append(allocator, ']');
     }
     for (manifest.flags) |flag| {
-        if (!first) try writer.writeByte(',');
+        if (!first) try buf.append(allocator, ',');
         first = false;
-        try writeJsonString(writer, flag.key);
-        try writer.writeByte(':');
-        try writer.writeAll(if (flag.enabled) "true" else "false");
+        try writeJsonString(buf, allocator, flag.key);
+        try buf.append(allocator, ':');
+        try buf.appendSlice(allocator, if (flag.enabled) "true" else "false");
     }
-    try writer.writeByte('}');
+    try buf.append(allocator, '}');
 }
 
-fn writeJsonString(writer: *std.Io.Writer, value: []const u8) anyerror!void {
-    try writer.writeByte('"');
+fn writeJsonString(buf: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, value: []const u8) anyerror!void {
+    try buf.append(allocator, '"');
     for (value) |ch| {
         switch (ch) {
-            '"' => try writer.writeAll("\\\""),
-            '\\' => try writer.writeAll("\\\\"),
-            '\n' => try writer.writeAll("\\n"),
-            '\r' => try writer.writeAll("\\r"),
-            '\t' => try writer.writeAll("\\t"),
+            '"' => try buf.appendSlice(allocator, "\\\""),
+            '\\' => try buf.appendSlice(allocator, "\\\\"),
+            '\n' => try buf.appendSlice(allocator, "\\n"),
+            '\r' => try buf.appendSlice(allocator, "\\r"),
+            '\t' => try buf.appendSlice(allocator, "\\t"),
             else => {
                 if (ch < 32) {
-                    try writer.print("\\u00{x:0>2}", .{ch});
+                    try buf.print(allocator, "\\u00{x:0>2}", .{ch});
                 } else {
-                    try writer.writeByte(ch);
+                    try buf.append(allocator, ch);
                 }
             },
         }
     }
-    try writer.writeByte('"');
+    try buf.append(allocator, '"');
 }
 
 test "runtime helper renders capability manifest json" {
@@ -75,5 +74,3 @@ test "runtime helper renders capability manifest json" {
     try std.testing.expect(std.mem.indexOf(u8, json, "\"adapters\":[\"cli\",\"http\"]") != null);
     try std.testing.expect(std.mem.indexOf(u8, json, "\"supportsAsyncTasks\":true") != null);
 }
-
-

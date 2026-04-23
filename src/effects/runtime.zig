@@ -33,7 +33,7 @@ pub const EffectsRuntime = struct {
         runtime_value.native_file_system = fs.NativeFileSystem.init();
         runtime_value.native_env_provider = env_provider.NativeEnvProvider.init();
         runtime_value.native_clock = clock.NativeClock.init();
-        runtime_value.native_http_client = http_client.NativeHttpClient.init(deps.native_http_requester);
+        runtime_value.native_http_client = http_client.NativeHttpClient.init(deps.native_http_requester, std.Io.Threaded.global_single_threaded.*.io());
 
         runtime_value.process_runner = deps.process_runner orelse runtime_value.native_process_runner.runner();
         runtime_value.file_system = deps.file_system orelse runtime_value.native_file_system.fileSystem();

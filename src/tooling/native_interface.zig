@@ -62,7 +62,7 @@ test "native tool helper builds definition and executes through handler" {
     try std.testing.expectEqual(@as(usize, 1), definition.params.len);
     try std.testing.expect(definition.native_handler != null);
 
-    var sink = core.logging.MemorySink.init(std.testing.allocator, 1);
+    var sink = core.logging.sinks.Memory.init(std.testing.allocator, 1);
     defer sink.deinit();
     var logger = core.logging.Logger.init(sink.asLogSink(), .silent);
     defer logger.deinit();

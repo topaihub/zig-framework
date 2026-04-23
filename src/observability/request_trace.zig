@@ -118,7 +118,7 @@ fn generateTraceId(allocator: std.mem.Allocator) anyerror![]u8 {
 }
 
 test "request trace generates 16-char trace id" {
-    var memory_sink = core.logging.MemorySink.init(std.testing.allocator, 8);
+    var memory_sink = core.logging.sinks.Memory.init(std.testing.allocator, 8);
     defer memory_sink.deinit();
     var logger = core.logging.Logger.init(memory_sink.asLogSink(), .trace);
     defer logger.deinit();

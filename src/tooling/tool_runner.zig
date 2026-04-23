@@ -78,7 +78,7 @@ pub const ToolRunner = struct {
         }
 
         const started = (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); });
-        var fallback_sink = core.logging.MemorySink.init(self.allocator, 1);
+        var fallback_sink = core.logging.sinks.Memory.init(self.allocator, 1);
         defer fallback_sink.deinit();
         var fallback_logger = core.logging.Logger.init(fallback_sink.asLogSink(), .silent);
         defer fallback_logger.deinit();
@@ -117,7 +117,7 @@ pub const ToolRunner = struct {
         const spec = definition.script_spec orelse return error.ScriptSpecMissing;
 
         const started = (blk: { const io = std.Io.Threaded.global_single_threaded.*.io(); break :blk std.Io.Timestamp.now(io, .real).toMilliseconds(); });
-        var fallback_sink = core.logging.MemorySink.init(self.allocator, 1);
+        var fallback_sink = core.logging.sinks.Memory.init(self.allocator, 1);
         defer fallback_sink.deinit();
         var fallback_logger = core.logging.Logger.init(fallback_sink.asLogSink(), .silent);
         defer fallback_logger.deinit();
@@ -332,7 +332,7 @@ test "tool runner executes script-backed tool successfully" {
         .description = "script-backed tool",
         .execution_kind = .external_json_stdio,
         .script_spec = .{
-            .program = "python",
+            .program = "python3",
             .args = &.{ "-c", "import json,sys; req=json.load(sys.stdin); print(json.dumps({'ok': True, 'output_json': req['params_json']}))" },
             .timeout_ms = 1000,
         },
@@ -368,7 +368,7 @@ test "tool runner maps script-backed failures" {
         .description = "failing script-backed tool",
         .execution_kind = .external_json_stdio,
         .script_spec = .{
-            .program = "python",
+            .program = "python3",
             .args = &.{ "-c", "print('not-json')" },
             .timeout_ms = 1000,
         },

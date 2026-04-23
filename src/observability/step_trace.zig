@@ -76,7 +76,7 @@ pub const StepTrace = struct {
 };
 
 test "step trace emits started and completed logs" {
-    var memory_sink = core.logging.MemorySink.init(std.testing.allocator, 8);
+    var memory_sink = core.logging.sinks.Memory.init(std.testing.allocator, 8);
     defer memory_sink.deinit();
     var logger = core.logging.Logger.init(memory_sink.asLogSink(), .trace);
     defer logger.deinit();
@@ -93,7 +93,7 @@ test "step trace emits started and completed logs" {
 }
 
 test "step trace warns on threshold or error" {
-    var memory_sink = core.logging.MemorySink.init(std.testing.allocator, 8);
+    var memory_sink = core.logging.sinks.Memory.init(std.testing.allocator, 8);
     defer memory_sink.deinit();
     var logger = core.logging.Logger.init(memory_sink.asLogSink(), .trace);
     defer logger.deinit();

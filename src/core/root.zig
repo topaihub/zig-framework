@@ -2,8 +2,9 @@ const std = @import("std");
 
 pub const MODULE_NAME = "core";
 pub const error_model = @import("error.zig");
-pub const logging = @import("logging/root.zig");
+pub const logging = @import("zig-logging");
 pub const validation = @import("validation/root.zig");
+pub const security = @import("security/root.zig");
 
 pub const ModuleStage = enum {
     scaffold,
@@ -18,8 +19,5 @@ test "core scaffold exports are stable" {
         "CORE_INTERNAL_ERROR",
         error_model.code.CORE_INTERNAL_ERROR,
     );
-    try std.testing.expectEqualStrings("logging", logging.MODULE_NAME);
     try std.testing.expectEqualStrings("validation", validation.MODULE_NAME);
 }
-
-

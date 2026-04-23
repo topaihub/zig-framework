@@ -301,7 +301,8 @@ pub const TaskRunner = struct {
                 var mutable_summary = summary;
                 mutable_summary.deinit(allocator);
             }
-            std.Thread.sleep(5 * std.time.ns_per_ms);
+            const sio = std.Io.Threaded.global_single_threaded.*.io();
+            sio.sleep(std.Io.Duration.fromMilliseconds(5), .real) catch {};
         }
 
         return error.TaskWaitTimeout;
@@ -424,35 +425,34 @@ pub const TaskRunner = struct {
         var buf: std.ArrayListUnmanaged(u8) = .empty;
         defer buf.deinit(self.allocator);
 
-        const writer = buf.writer(self.allocator);
-        try writer.writeAll("{\"taskId\":");
-        try writeJsonString(writer, task.id);
-        try writer.writeAll(",\"command\":");
-        try writeJsonString(writer, task.command);
-        try writer.writeAll(",\"state\":");
-        try writeJsonString(writer, task.state.asText());
+        try buf.appendSlice(self.allocator, "{\"taskId\":");
+        try writeJsonString(&buf, self.allocator, task.id);
+        try buf.appendSlice(self.allocator, ",\"command\":");
+        try writeJsonString(&buf, self.allocator, task.command);
+        try buf.appendSlice(self.allocator, ",\"state\":");
+        try writeJsonString(&buf, self.allocator, task.state.asText());
         if (task.request_id) |request_id| {
-            try writer.writeAll(",\"requestId\":");
-            try writeJsonString(writer, request_id);
+            try buf.appendSlice(self.allocator, ",\"requestId\":");
+            try writeJsonString(&buf, self.allocator, request_id);
         }
         if (task.started_at_ms) |started_at_ms| {
-            try writer.print(",\"startedAtMs\":{d}", .{started_at_ms});
+            try buf.print(self.allocator, ",\"startedAtMs\":{d}", .{started_at_ms});
         }
         if (task.finished_at_ms) |finished_at_ms| {
-            try writer.print(",\"finishedAtMs\":{d}", .{finished_at_ms});
+            try buf.print(self.allocator, ",\"finishedAtMs\":{d}", .{finished_at_ms});
         }
         if (task.started_at_ms != null and task.finished_at_ms != null and task.finished_at_ms.? >= task.started_at_ms.?) {
-            try writer.print(",\"durationMs\":{d}", .{task.finished_at_ms.? - task.started_at_ms.?});
+            try buf.print(self.allocator, ",\"durationMs\":{d}", .{task.finished_at_ms.? - task.started_at_ms.?});
         }
         if (task.error_code) |error_code| {
-            try writer.writeAll(",\"errorCode\":");
-            try writeJsonString(writer, error_code);
+            try buf.appendSlice(self.allocator, ",\"errorCode\":");
+            try writeJsonString(&buf, self.allocator, error_code);
         }
         if (task.result_json) |result_json| {
-            try writer.writeAll(",\"result\":");
-            try writer.writeAll(result_json);
+            try buf.appendSlice(self.allocator, ",\"result\":");
+            try buf.appendSlice(self.allocator, result_json);
         }
-        try writer.writeByte('}');
+        try buf.append(self.allocator, '}');
         return self.allocator.dupe(u8, buf.items);
     }
 
@@ -487,25 +487,25 @@ pub const TaskRunner = struct {
     }
 };
 
-fn writeJsonString(writer: *std.Io.Writer, value: []const u8) anyerror!void {
-    try writer.writeByte('"');
+fn writeJsonString(buf: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, value: []const u8) anyerror!void {
+    try buf.append(allocator, '"');
     for (value) |ch| {
         switch (ch) {
-            '"' => try writer.writeAll("\\\""),
-            '\\' => try writer.writeAll("\\\\"),
-            '\n' => try writer.writeAll("\\n"),
-            '\r' => try writer.writeAll("\\r"),
-            '\t' => try writer.writeAll("\\t"),
+            '"' => try buf.appendSlice(allocator, "\\\""),
+            '\\' => try buf.appendSlice(allocator, "\\\\"),
+            '\n' => try buf.appendSlice(allocator, "\\n"),
+            '\r' => try buf.appendSlice(allocator, "\\r"),
+            '\t' => try buf.appendSlice(allocator, "\\t"),
             else => {
                 if (ch < 32) {
-                    try writer.print("\\u00{x:0>2}", .{ch});
+                    try buf.print(allocator, "\\u00{x:0>2}", .{ch});
                 } else {
-                    try writer.writeByte(ch);
+                    try buf.append(allocator, ch);
                 }
             },
         }
     }
-    try writer.writeByte('"');
+    try buf.append(allocator, '"');
 }
 
 test "task runner accepts and stores queued tasks" {
@@ -580,7 +580,8 @@ test "task runner executes async jobs and stores result" {
 
         fn run(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror![]u8 {
             const self: *@This() = @ptrCast(@alignCast(ptr));
-            std.Thread.sleep(10 * std.time.ns_per_ms);
+            const sio = std.Io.Threaded.global_single_threaded.*.io();
+            sio.sleep(std.Io.Duration.fromMilliseconds(10), .real) catch {};
             return allocator.dupe(u8, self.message);
         }
 
@@ -626,5 +627,3 @@ test "task runner executes async jobs and stores result" {
     try std.testing.expect(observer.count() >= 3);
     try std.testing.expect(event_bus.count() >= 3);
 }
-
-

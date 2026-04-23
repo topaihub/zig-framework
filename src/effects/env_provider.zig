@@ -58,8 +58,8 @@ pub const NativeEnvProvider = struct {
     }
 
     pub fn getOptional(_: *NativeEnvProvider, allocator: std.mem.Allocator, key: []const u8) !?[]u8 {
-        return std.process.getEnvVarOwned(allocator, key) catch |err| switch (err) {
-            error.EnvironmentVariableNotFound => null,
+        return std.Io.Threaded.global_single_threaded.environ.process_environ.getAlloc(allocator, key) catch |err| switch (err) {
+            error.EnvironmentVariableMissing => null,
             else => err,
         };
     }
@@ -69,8 +69,8 @@ pub const NativeEnvProvider = struct {
     }
 
     pub fn has(_: *NativeEnvProvider, key: []const u8) bool {
-        const value = std.process.getEnvVarOwned(std.heap.page_allocator, key) catch |err| switch (err) {
-            error.EnvironmentVariableNotFound => return false,
+        const value = std.Io.Threaded.global_single_threaded.environ.process_environ.getAlloc(std.heap.page_allocator, key) catch |err| switch (err) {
+            error.EnvironmentVariableMissing => return false,
             else => return false,
         };
         defer std.heap.page_allocator.free(value);

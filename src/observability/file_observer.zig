@@ -52,17 +52,18 @@ pub const JsonlFileObserver = struct {
     }
 
     fn recordInternal(self: *Self, topic: []const u8, payload_json: []const u8) anyerror!void {
-        var managed = std.array_list.Managed(u8).init(self.allocator);
-        var rendered = managed.moveToUnmanaged();
-        defer rendered.deinit(self.allocator);
-        var writer = std.Io.Writer.fromArrayList(&rendered);
+        var alloc_writer = std.Io.Writer.Allocating.init(self.allocator);
+        var writer = &alloc_writer.writer;
         try writer.writeAll("{\"topic\":");
-        try writeJsonString(&writer, topic);
+        try writeJsonString(writer, topic);
         const io = std.Io.Threaded.global_single_threaded.*.io();
         const ts = std.Io.Timestamp.now(io, .real);
         try writer.print(",\"tsUnixMs\":{d},\"payload\":", .{@divFloor(ts.nanoseconds, 1_000_000)});
         try writer.writeAll(payload_json);
         try writer.writeAll("}\n");
+
+        var rendered = alloc_writer.toArrayList();
+        defer rendered.deinit(self.allocator);
 
         if (self.max_bytes) |max_bytes| {
             if (self.current_bytes + rendered.items.len > max_bytes) {
@@ -138,7 +139,7 @@ test "jsonl file observer writes observer events" {
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
 
-    const root_path = try tmp_dir.dir.realpathAlloc(std.testing.allocator, ".");
+    const root_path = try tmp_dir.dir.realPathFileAlloc(std.Io.Threaded.global_single_threaded.*.io(), ".", std.testing.allocator);
     defer std.testing.allocator.free(root_path);
     const file_path = try std.fs.path.join(std.testing.allocator, &.{ root_path, "events", "observer.jsonl" });
     defer std.testing.allocator.free(file_path);
@@ -149,7 +150,7 @@ test "jsonl file observer writes observer events" {
     try observer.record("task.succeeded", "{\"taskId\":\"task_01\"}");
     try observer.flush();
 
-    const contents = try tmp_dir.dir.readFileAlloc(std.testing.allocator, "events/observer.jsonl", 4096);
+    const contents = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.*.io(), "events/observer.jsonl", std.testing.allocator, @enumFromInt(4096));
     defer std.testing.allocator.free(contents);
 
     try std.testing.expectEqual(@as(usize, 1), observer.flush_count);

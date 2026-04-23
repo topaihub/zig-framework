@@ -153,7 +153,7 @@ test "native http client can use injected requester" {
         }
     };
 
-    var client = NativeHttpClient.init(Mock.mockRequest);
+    var client = NativeHttpClient.init(Mock.mockRequest, std.Io.Threaded.global_single_threaded.*.io());
     var response = try client.send(std.testing.allocator, .{
         .method = .POST,
         .url = "https://example.test/echo",

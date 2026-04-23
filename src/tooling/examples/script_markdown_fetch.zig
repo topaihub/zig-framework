@@ -22,7 +22,7 @@ pub const ScriptMarkdownFetchTool = struct {
             .params = tool_params,
             .execution_kind = .external_json_stdio,
             .script_spec = .{
-                .program = "python",
+                .program = "python3",
                 .args = script_args,
                 .timeout_ms = 1500,
             },

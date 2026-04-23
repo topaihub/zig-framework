@@ -100,7 +100,7 @@ fn isWithinAllowedRoots(path: []const u8, roots: []const []const u8) bool {
 }
 
 fn pathStartsWithRoot(path: []const u8, root: []const u8) bool {
-    const trimmed_root = std.mem.trimRight(u8, root, "/\\");
+    const trimmed_root = std.mem.trimEnd(u8, root, "/\\");
     if (trimmed_root.len == 0 or path.len < trimmed_root.len) {
         return false;
     }

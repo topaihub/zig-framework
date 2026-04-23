@@ -251,34 +251,34 @@ pub const StoredValue = union(enum) {
         };
     }
 
-    pub fn writeJson(self: *const StoredValue, writer: anytype) anyerror!void {
+    pub fn writeJson(self: *const StoredValue, buf: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator) anyerror!void {
         switch (self.*) {
-            .string => |text| try writeJsonString(writer, text),
-            .integer => |number| try writer.print("{d}", .{number}),
-            .boolean => |flag| try writer.writeAll(if (flag) "true" else "false"),
-            .float => |number| try writer.print("{d}", .{number}),
-            .null => try writer.writeAll("null"),
+            .string => |text| try writeJsonString(buf, allocator, text),
+            .integer => |number| try buf.print(allocator, "{d}", .{number}),
+            .boolean => |flag| try buf.appendSlice(allocator, if (flag) "true" else "false"),
+            .float => |number| try buf.print(allocator, "{d}", .{number}),
+            .null => try buf.appendSlice(allocator, "null"),
             .object => |fields| {
-                try writer.writeByte('{');
+                try buf.append(allocator, '{');
                 for (fields, 0..) |field, index| {
                     if (index > 0) {
-                        try writer.writeByte(',');
+                        try buf.append(allocator, ',');
                     }
-                    try writeJsonString(writer, field.key);
-                    try writer.writeByte(':');
-                    try field.value.writeJson(writer);
+                    try writeJsonString(buf, allocator, field.key);
+                    try buf.append(allocator, ':');
+                    try field.value.writeJson(buf, allocator);
                 }
-                try writer.writeByte('}');
+                try buf.append(allocator, '}');
             },
             .array => |items| {
-                try writer.writeByte('[');
+                try buf.append(allocator, '[');
                 for (items, 0..) |item, index| {
                     if (index > 0) {
-                        try writer.writeByte(',');
+                        try buf.append(allocator, ',');
                     }
-                    try item.writeJson(&writer);
+                    try item.writeJson(buf, allocator);
                 }
-                try writer.writeByte(']');
+                try buf.append(allocator, ']');
             },
         }
     }
@@ -389,7 +389,7 @@ pub fn serializeValidationValue(allocator: std.mem.Allocator, value: ValidationV
     var buf: std.ArrayListUnmanaged(u8) = .empty;
     defer buf.deinit(allocator);
 
-    try writeValidationValueJson(buf.writer(allocator), value);
+    try writeValidationValueJson(&buf, allocator, value);
     return allocator.dupe(u8, buf.items);
 }
 
@@ -397,61 +397,61 @@ pub fn serializeStoredValue(allocator: std.mem.Allocator, value: StoredValue) an
     var buf: std.ArrayListUnmanaged(u8) = .empty;
     defer buf.deinit(allocator);
 
-    try value.writeJson(buf.writer(allocator));
+    try value.writeJson(&buf, allocator);
     return allocator.dupe(u8, buf.items);
 }
 
-fn writeValidationValueJson(writer: anytype, value: ValidationValue) anyerror!void {
+fn writeValidationValueJson(buf: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, value: ValidationValue) anyerror!void {
     switch (value) {
-        .string => |text| try writeJsonString(writer, text),
-        .integer => |number| try writer.print("{d}", .{number}),
-        .boolean => |flag| try writer.writeAll(if (flag) "true" else "false"),
-        .float => |number| try writer.print("{d}", .{number}),
-        .null => try writer.writeAll("null"),
+        .string => |text| try writeJsonString(buf, allocator, text),
+        .integer => |number| try buf.print(allocator, "{d}", .{number}),
+        .boolean => |flag| try buf.appendSlice(allocator, if (flag) "true" else "false"),
+        .float => |number| try buf.print(allocator, "{d}", .{number}),
+        .null => try buf.appendSlice(allocator, "null"),
         .object => |fields| {
-            try writer.writeByte('{');
+            try buf.append(allocator, '{');
             for (fields, 0..) |field, index| {
                 if (index > 0) {
-                    try writer.writeByte(',');
+                    try buf.append(allocator, ',');
                 }
-                try writeJsonString(writer, field.key);
-                try writer.writeByte(':');
-                try writeValidationValueJson(writer, field.value);
+                try writeJsonString(buf, allocator, field.key);
+                try buf.append(allocator, ':');
+                try writeValidationValueJson(buf, allocator, field.value);
             }
-            try writer.writeByte('}');
+            try buf.append(allocator, '}');
         },
         .array => |items| {
-            try writer.writeByte('[');
+            try buf.append(allocator, '[');
             for (items, 0..) |item, index| {
                 if (index > 0) {
-                    try writer.writeByte(',');
+                    try buf.append(allocator, ',');
                 }
-                try writeValidationValueJson(writer, item);
+                try writeValidationValueJson(buf, allocator, item);
             }
-            try writer.writeByte(']');
+            try buf.append(allocator, ']');
         },
     }
 }
 
-fn writeJsonString(writer: *std.Io.Writer, value: []const u8) anyerror!void {
-    try writer.writeByte('"');
+fn writeJsonString(buf: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, value: []const u8) anyerror!void {
+    try buf.append(allocator, '"');
     for (value) |ch| {
         switch (ch) {
-            '"' => try writer.writeAll("\\\""),
-            '\\' => try writer.writeAll("\\\\"),
-            '\n' => try writer.writeAll("\\n"),
-            '\r' => try writer.writeAll("\\r"),
-            '\t' => try writer.writeAll("\\t"),
+            '"' => try buf.appendSlice(allocator, "\\\""),
+            '\\' => try buf.appendSlice(allocator, "\\\\"),
+            '\n' => try buf.appendSlice(allocator, "\\n"),
+            '\r' => try buf.appendSlice(allocator, "\\r"),
+            '\t' => try buf.appendSlice(allocator, "\\t"),
             else => {
                 if (ch < 32) {
-                    try writer.print("\\u00{x:0>2}", .{ch});
+                    try buf.print(allocator, "\\u00{x:0>2}", .{ch});
                 } else {
-                    try writer.writeByte(ch);
+                    try buf.append(allocator, ch);
                 }
             },
         }
     }
-    try writer.writeByte('"');
+    try buf.append(allocator, '"');
 }
 
 fn objectEquals(stored: []const StoredField, runtime: []const ValidationField) bool {
