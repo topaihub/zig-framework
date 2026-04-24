@@ -48,4 +48,8 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run framework unit tests");
     test_step.dependOn(&run_root_tests.step);
+
+    const release_dep = b.dependency("zig-release", .{});
+    const zig_release = @import("zig-release");
+    zig_release.addReleaseStep(b, release_dep, .{});
 }
